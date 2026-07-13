@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-and-package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: E2E suite (dev build)
+        run: npm test
+
+      - name: E2E suite (packaged exe)
+        run: npm run test:packaged
+
+      - name: Build installer
+        run: npm run dist
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: egPDF-setup
+          path: release/*.exe
+          if-no-files-found: error
+
+      # Screenshots + results JSON from both suites — the visual record of
+      # what the app actually rendered, kept even when a step fails.
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-evidence
+          path: test/.out/**
+          if-no-files-found: ignore
+
+      # Tag pushes (v*) publish the installer as a GitHub Release. The asset
+      # keeps a version-independent name so the README's
+      # releases/latest/download link never goes stale.
+      - name: Stage release asset
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: Copy-Item (Get-ChildItem "release/egPDF Setup *.exe").FullName "release/egPDF-Setup.exe"
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/egPDF-Setup.exe
+          generate_release_notes: true

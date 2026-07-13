@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:;" />
+  <title>egPDF</title>
+  <link rel="stylesheet" href="dist/pdf_viewer.css" />
+  <link rel="stylesheet" href="src/styles.css" />
+</head>
+<body>
+  <div id="tabbar">
+    <div id="tabs"></div>
+    <button id="btn-newtab" class="icon-btn" title="Open PDF (Ctrl+O)">+</button>
+  </div>
+
+  <div id="toolbar">
+    <div class="tb-group">
+      <button id="btn-sidebar" class="icon-btn" title="Pages panel — reorder, rotate, delete"></button>
+    </div>
+    <div class="tb-sep"></div>
+    <div class="tb-group">
+      <button id="btn-open" class="icon-btn" title="Open (Ctrl+O)"></button>
+      <button id="btn-save" class="icon-btn" title="Save (Ctrl+S)"></button>
+      <button id="btn-saveas" class="icon-btn" title="Save As (Ctrl+Shift+S)"></button>
+      <button id="btn-print" class="icon-btn" title="Print (Ctrl+P) — includes edits and form values"></button>
+    </div>
+    <div class="tb-sep"></div>
+    <div class="tb-group" id="nav-group">
+      <input id="page-input" type="text" inputmode="numeric" value="1" />
+      <span id="page-count" class="dim">/ 0</span>
+    </div>
+    <div class="tb-sep"></div>
+    <div class="tb-group">
+      <button id="btn-zoom-out" class="icon-btn" title="Zoom out (Ctrl+-)"></button>
+      <span id="zoom-label">100%</span>
+      <button id="btn-zoom-in" class="icon-btn" title="Zoom in (Ctrl+=)"></button>
+      <button id="btn-fit" class="icon-btn" title="Fit width"></button>
+    </div>
+    <div class="tb-sep"></div>
+    <div class="tb-group">
+      <button id="btn-split" class="icon-btn" title="Split view — two documents side by side"></button>
+      <button id="btn-compare" class="icon-btn" title="Compare the two documents in split view"></button>
+    </div>
+    <div class="tb-spacer"></div>
+    <div class="tb-group" id="tools-group">
+      <button id="tool-select" class="icon-btn tool active" data-tool="select" title="Select / pan (V)"></button>
+      <button id="tool-redact" class="icon-btn tool" data-tool="redact" title="Redact — permanently removes content on save (R)"></button>
+      <button id="tool-whiteout" class="icon-btn tool" data-tool="whiteout" title="Whiteout (W)"></button>
+      <button id="tool-highlight" class="icon-btn tool" data-tool="highlight" title="Highlight (H)"></button>
+      <button id="tool-text" class="icon-btn tool" data-tool="text" title="Add text (T)"></button>
+      <select id="text-font" title="Font"></select>
+      <select id="text-size" title="Text size">
+        <option>10</option><option>12</option><option selected>14</option>
+        <option>18</option><option>24</option><option>36</option>
+      </select>
+      <button id="tool-image" class="icon-btn tool" data-tool="image" title="Insert image (I)"></button>
+      <button id="tool-note" class="icon-btn tool" data-tool="note" title="Add comment (C)"></button>
+      <button id="btn-undo" class="icon-btn" title="Undo (Ctrl+Z)"></button>
+    </div>
+    <div class="tb-sep"></div>
+    <div class="tb-group">
+      <button id="btn-search" class="icon-btn" title="Search (Ctrl+F)"></button>
+    </div>
+  </div>
+
+  <div id="searchbar" class="hidden">
+    <input id="search-input" type="text" placeholder="Find in document…" />
+    <span id="search-status" class="dim"></span>
+    <button id="search-prev" class="icon-btn" title="Previous (Shift+Enter)">‹</button>
+    <button id="search-next" class="icon-btn" title="Next (Enter)">›</button>
+    <button id="search-close" class="icon-btn" title="Close (Esc)">✕</button>
+  </div>
+
+  <div id="main-row">
+    <div id="sidebar" class="hidden"></div>
+    <div id="viewer-root">
+      <div class="pane focused" id="pane-0" data-pane="0">
+        <div class="pane-empty hidden"><button class="pane-open-btn">Open a PDF here</button></div>
+      </div>
+      <div class="pane hidden" id="pane-1" data-pane="1">
+        <div class="pane-empty hidden"><button class="pane-open-btn">Open a PDF here</button></div>
+      </div>
+      <div id="empty-state">
+        <div class="empty-card">
+          <div class="empty-logo">egPDF</div>
+          <p>Drop a PDF anywhere, or</p>
+          <button id="btn-open-empty">Open a file</button>
+          <p class="dim small">Ctrl+O</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="compare-panel" class="hidden">
+    <div id="compare-header">
+      <span id="compare-title">Compare</span>
+      <span id="compare-sub" class="dim small"></span>
+      <span class="tb-spacer"></span>
+      <button id="compare-close" class="icon-btn" title="Close">✕</button>
+    </div>
+    <div id="compare-list"></div>
+  </div>
+
+  <div id="selection-popup" class="hidden">
+    <button class="sp-highlight">Highlight</button>
+    <button class="sp-edittext">Edit text</button>
+    <button class="sp-redact">Redact</button>
+  </div>
+
+  <div id="print-container"></div>
+
+  <div id="print-overlay" class="hidden">
+    <div id="print-panel">
+      <div id="print-panel-header">
+        <h2>Print</h2>
+        <button id="print-close" class="icon-btn" title="Close (Esc)">✕</button>
+      </div>
+      <div class="pp-actions">
+        <button id="pp-print">Print</button>
+        <label class="pp-copies">Copies: <input id="pp-copies" type="number" min="1" max="99" value="1" /></label>
+      </div>
+      <div class="pp-section-label">Printer</div>
+      <select id="pp-printer"></select>
+      <div class="pp-section-label">Settings</div>
+      <select id="pp-range-mode">
+        <option value="all">Print All Pages</option>
+        <option value="custom">Custom Print Range</option>
+      </select>
+      <input id="pp-range" type="text" placeholder="e.g. 1-3, 5" class="hidden" />
+      <select id="pp-duplex">
+        <option value="simplex">Print One Sided</option>
+        <option value="longEdge">Print on Both Sides — flip on long edge</option>
+        <option value="shortEdge">Print on Both Sides — flip on short edge</option>
+      </select>
+      <select id="pp-collate">
+        <option value="1">Collated &nbsp;1,2,3 &nbsp;1,2,3</option>
+        <option value="0">Uncollated &nbsp;1,1 &nbsp;2,2 &nbsp;3,3</option>
+      </select>
+      <select id="pp-orient">
+        <option value="portrait">Portrait Orientation</option>
+        <option value="landscape">Landscape Orientation</option>
+      </select>
+      <select id="pp-paper">
+        <option value="">Printer Default Paper</option>
+        <option value="A4">A4</option>
+        <option value="Letter">Letter</option>
+        <option value="Legal">Legal</option>
+        <option value="A3">A3</option>
+      </select>
+      <select id="pp-color">
+        <option value="1">Color</option>
+        <option value="0">Black and white</option>
+      </select>
+      <select id="pp-scale">
+        <option value="fit">Fit to printable area</option>
+        <option value="actual">Actual size (no margins)</option>
+      </select>
+    </div>
+    <div id="print-preview-area">
+      <div id="print-preview-scroll">
+        <div id="print-preview-stage"><img id="pp-page-img" alt="Print preview" /></div>
+      </div>
+      <div id="print-preview-bar">
+        <div class="pp-nav">
+          <button id="pp-prev" class="icon-btn">‹</button>
+          <span id="pp-pageinfo">1 of 1</span>
+          <button id="pp-next" class="icon-btn">›</button>
+        </div>
+        <span class="tb-spacer"></span>
+        <div class="pp-zoom">
+          <input id="pp-zoom" type="range" min="25" max="140" value="60" title="Zoom preview" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="statusbar">
+    <span id="status-left"></span>
+    <span class="tb-spacer"></span>
+    <span id="status-right" class="dim"></span>
+  </div>
+
+  <script src="dist/renderer.js"></script>
+</body>
+</html>
