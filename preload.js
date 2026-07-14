@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer, webUtils } = require('electron');
+const { contextBridge, ipcRenderer, webUtils, webFrame } = require('electron');
 
 contextBridge.exposeInMainWorld('native', {
   openPdfDialog: () => ipcRenderer.invoke('dialog:open-pdfs'),
@@ -15,6 +15,14 @@ contextBridge.exposeInMainWorld('native', {
   fontFamilies: () => ipcRenderer.invoke('font:families'),
   fontPath: (name) => ipcRenderer.invoke('font:path', name),
   ocrRecognize: (png) => ipcRenderer.invoke('ocr:recognize', png),
+  // OS spellchecker probe: null when the word is fine (or no dictionary is
+  // loaded), otherwise the suggestion list. Synchronous and fully local.
+  spellSuggest: (word) => {
+    try {
+      if (!webFrame.isWordMisspelled(word)) return null;
+      return webFrame.getWordSuggestions(word);
+    } catch { return null; }
+  },
   listPrinters: () => ipcRenderer.invoke('print:list'),
   printNow: (opts) => ipcRenderer.invoke('print:go', opts),
   getTestConfig: () => ipcRenderer.invoke('test:config'),

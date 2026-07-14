@@ -58,6 +58,7 @@
       </select>
       <button id="tool-image" class="icon-btn tool" data-tool="image" title="Insert image (I)"></button>
       <button id="tool-note" class="icon-btn tool" data-tool="note" title="Add comment (C)"></button>
+      <button id="tool-ocrarea" class="icon-btn tool" data-tool="ocrarea" title="Extract text from an area (OCR) — drag a box, get the text (X)"></button>
       <button id="btn-undo" class="icon-btn" title="Undo (Ctrl+Z)"></button>
     </div>
     <div class="tb-sep"></div>
@@ -108,6 +109,19 @@
     <button class="sp-highlight">Highlight</button>
     <button class="sp-edittext">Edit text</button>
     <button class="sp-redact">Redact</button>
+  </div>
+
+  <div id="ocr-popup" class="hidden">
+    <div id="ocr-popup-card">
+      <div id="ocr-popup-header">
+        <span>Extracted text</span>
+        <span id="ocr-popup-sub" class="dim small"></span>
+        <span class="tb-spacer"></span>
+        <button id="ocr-copy">Copy</button>
+        <button id="ocr-popup-close" class="icon-btn" title="Close (Esc)">✕</button>
+      </div>
+      <textarea id="ocr-popup-text" spellcheck="false"></textarea>
+    </div>
   </div>
 
   <div id="print-container"></div>

@@ -361,6 +361,41 @@ body.dragging #viewer-root::after {
 #selection-popup button:hover { background: rgba(127,127,127,0.14); }
 #selection-popup .sp-redact:hover { color: var(--danger); }
 
+/* ---------- OCR area popup ---------- */
+#ocr-popup {
+  position: fixed; inset: 0; z-index: 70;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.25);
+}
+#ocr-popup.hidden { display: none; }
+#ocr-popup-card {
+  width: min(640px, calc(100vw - 80px));
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 10px 12px 12px 12px;
+  gap: 8px;
+}
+#ocr-popup-header { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+#ocr-copy {
+  font: inherit; font-size: 12px;
+  border: none; border-radius: 5px;
+  background: var(--accent); color: #fff;
+  padding: 5px 14px; cursor: pointer;
+}
+#ocr-copy:hover { filter: brightness(1.08); }
+#ocr-popup-text {
+  width: 100%; height: min(320px, 45vh);
+  resize: vertical;
+  font: 13px/1.5 Consolas, "Segoe UI", monospace;
+  border: 1px solid var(--border); border-radius: 5px;
+  background: var(--bg); color: var(--text);
+  padding: 8px 10px; outline: none;
+  user-select: text; -webkit-user-select: text;
+  white-space: pre-wrap;
+}
+
 /* ---------- Print preview (M365-style) ---------- */
 #print-overlay {
   position: fixed; inset: 0; z-index: 90;

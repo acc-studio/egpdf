@@ -1,10 +1,11 @@
 import { applyIcons } from './icons.js';
 import { DocView, loadPdf } from './viewer.js';
 import {
-  editState, setTool, onEditsChanged, onToolChanged,
+  editState, setTool, onEditsChanged, onToolChanged, onOcrArea,
   undoLast, deleteSelected, clearSelection, applyTextSize, applyFontFamily,
   addSelectionRects, editTextFromSelection,
 } from './edits.js';
+import { ocrArea } from './ocrbox.js';
 import { openPrintPreview, isPrintPreviewOpen } from './print.js';
 import { detectAvailableFonts } from './fonts.js';
 import { buildSavedPdf, reorderPages, rotatePage, rotateAllPages, deletePage } from './save.js';
@@ -34,6 +35,7 @@ const TOOL_HINTS = {
   text: 'Click where you want to add text',
   image: 'Click where you want to place the image',
   note: 'Click where you want to attach a comment',
+  ocrarea: 'Drag over an area to read its text (OCR) — nothing is added to the document',
 };
 
 // ---------------------------------------------------------------- views & panes
@@ -371,6 +373,61 @@ async function runOcr(pageNums = null) {
   }
 }
 
+// ---------------------------------------------------------------- area OCR
+
+let ocrAreaBusy = false;
+
+function showOcrPopup(text, sub = '') {
+  $('ocr-popup-sub').textContent = sub;
+  $('ocr-popup-text').value = text;
+  $('ocr-popup').classList.remove('hidden');
+  $('ocr-popup-text').focus();
+  $('ocr-popup-text').select();
+}
+
+function closeOcrPopup() {
+  $('ocr-popup').classList.add('hidden');
+}
+
+async function extractAreaText(tab, pageNum, rect) {
+  if (ocrAreaBusy) return null;
+  ocrAreaBusy = true;
+  setStatus('Reading the selected area…');
+  try {
+    const text = await ocrArea(tab.pdf, pageNum, rect);
+    if (!text) {
+      setStatus('No text could be recognized in that area', true);
+      return '';
+    }
+    const words = text.split(/\s+/).filter(Boolean).length;
+    showOcrPopup(text, `page ${pageNum} · ${words} word${words === 1 ? '' : 's'}`);
+    setStatus('');
+    return text;
+  } catch (e) {
+    console.error(e);
+    setStatus(`Could not read the area: ${e.message || e}`, true);
+    return null;
+  } finally {
+    ocrAreaBusy = false;
+  }
+}
+
+onOcrArea((tab, pageNum, rect) => { extractAreaText(tab, pageNum, rect); });
+
+$('ocr-popup-close').addEventListener('click', closeOcrPopup);
+$('ocr-popup').addEventListener('pointerdown', (e) => {
+  if (e.target === $('ocr-popup')) closeOcrPopup();
+});
+$('ocr-copy').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('ocr-popup-text').value);
+    $('ocr-copy').textContent = 'Copied';
+    setTimeout(() => { $('ocr-copy').textContent = 'Copy'; }, 1200);
+  } catch {
+    setStatus('Could not access the clipboard', true);
+  }
+});
+
 async function structuralUndo(tab) {
   if (!tab || !tab.history.length) return false;
   const h = tab.history.pop();
@@ -608,7 +665,7 @@ applyIcons({
   'btn-split': 'split', 'btn-compare': 'compare',
   'tool-select': 'select', 'tool-redact': 'redact', 'tool-whiteout': 'whiteout',
   'tool-highlight': 'highlight', 'tool-text': 'text', 'tool-image': 'image',
-  'tool-note': 'note',
+  'tool-note': 'note', 'tool-ocrarea': 'ocrarea',
   'btn-undo': 'undo', 'btn-search': 'search',
 });
 
@@ -740,12 +797,14 @@ window.addEventListener('keydown', (e) => {
     hideSelectionPopup();
     setTool('select');
     closeComparePanel();
+    closeOcrPopup();
   } else if (e.key === 'v') setTool('select');
   else if (e.key === 'r') setTool('redact');
   else if (e.key === 'w') setTool('whiteout');
   else if (e.key === 'h') setTool('highlight');
   else if (e.key === 't') setTool('text');
   else if (e.key === 'c') setTool('note');
+  else if (e.key === 'x') setTool('ocrarea');
   else if (e.key === 'i') startImageTool();
 });
 
@@ -790,5 +849,6 @@ import('./autotest.js').then((m) =>
       reorder: (from, to) => structuralOp(active, (b) => reorderPages(b, from, to)),
       del: (n) => structuralOp(active, (b) => deletePage(b, n - 1)),
       ocr: (pages) => runOcr(pages),
+      ocrBox: (n, rect) => extractAreaText(active, n, rect),
     },
   }));

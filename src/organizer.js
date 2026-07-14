@@ -12,13 +12,31 @@ export class Organizer {
     this.tab = null;
     this.observer = null;
     this.dragFrom = null;
+    // thumbnail bitmaps per document (keyed by page inside) — kept across tab
+    // switches, dropped automatically when a pdf is destroyed/reloaded
+    this.caches = new WeakMap();
+    this.cache = new Map();
+    this.cachePdf = null;
+    this.pending = new Map();
+    this.gen = 0;
   }
 
   async show(tab) {
     this.tab = tab;
     this.el.replaceChildren();
     this.observer?.disconnect();
+    this.gen++;
     if (!tab) return;
+    if (this.cachePdf !== tab.pdf) {
+      this.cachePdf = tab.pdf;
+      let store = this.caches.get(tab.pdf);
+      if (!store) {
+        store = { cache: new Map(), pending: new Map() };
+        this.caches.set(tab.pdf, store);
+      }
+      this.cache = store.cache;
+      this.pending = store.pending;
+    }
     this.observer = new IntersectionObserver((entries) => {
       for (const en of entries) {
         if (en.isIntersecting) this.renderThumb(en.target);
@@ -79,8 +97,36 @@ export class Organizer {
         if (to !== from) this.opts.onReorder(from, to);
       });
 
+      // Cached bitmap → show it immediately, no render round-trip.
+      const cached = this.cache.get(n);
+      if (cached) {
+        thumb.querySelector('.thumb-canvas-box').replaceChildren(cached);
+        thumb._rendered = true;
+      }
+
       this.el.appendChild(thumb);
       this.observer.observe(thumb);
+    }
+    this.prefetch(this.gen);
+  }
+
+  // Warm the thumbnail cache in the background so scrolling the panel (and
+  // reopening it) doesn't wait on renders. Paced to leave the pdf.js worker
+  // mostly free for the main view; capped for very large documents.
+  async prefetch(gen) {
+    const pdf = this.cachePdf;
+    const N = Math.min(this.tab?.pdf.numPages || 0, 300);
+    for (let n = 1; n <= N; n++) {
+      if (this.gen !== gen || this.cachePdf !== pdf) return;
+      if (this.cache.has(n)) continue;
+      try { await this.renderThumbCanvas(n, pdf); } catch { return; }
+      if (this.gen !== gen || this.cachePdf !== pdf) return;
+      const t = this.el.querySelector(`.thumb[data-page="${n}"]`);
+      if (t && !t._rendered) {
+        t.querySelector('.thumb-canvas-box').replaceChildren(this.cache.get(n));
+        t._rendered = true;
+      }
+      await new Promise((r) => setTimeout(r, 15));
     }
   }
 
@@ -89,14 +135,13 @@ export class Organizer {
       .forEach((t) => t.classList.remove('drag-over-before', 'drag-over-after'));
   }
 
-  async renderThumb(thumb) {
-    if (thumb._rendered || thumb._rendering || !this.tab) return;
-    thumb._rendering = true;
-    const tab = this.tab;
-    try {
-      const n = +thumb.dataset.page;
-      const page = await tab.pdf.getPage(n);
-      if (this.tab !== tab) return;
+  // Render (or fetch from cache) the bitmap for one page. Deduplicates
+  // concurrent requests for the same page via `pending`.
+  renderThumbCanvas(n, pdf) {
+    if (this.cache.has(n)) return Promise.resolve(this.cache.get(n));
+    if (this.pending.has(n)) return this.pending.get(n);
+    const job = (async () => {
+      const page = await pdf.getPage(n);
       const scale = 120 / page.getViewport({ scale: 1 }).width;
       const viewport = page.getViewport({ scale });
       const canvas = document.createElement('canvas');
@@ -108,6 +153,26 @@ export class Organizer {
         viewport,
         transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null,
       }).promise;
+      if (this.cachePdf === pdf) {
+        this.cache.set(n, canvas);
+        // ~0.3 MB per thumb; keep the cache bounded for huge documents
+        if (this.cache.size > 400) this.cache.delete(this.cache.keys().next().value);
+      }
+      return canvas;
+    })();
+    this.pending.set(n, job);
+    // both handlers, so the cleanup chain never becomes an unhandled rejection
+    job.then(() => this.pending.delete(n), () => this.pending.delete(n));
+    return job;
+  }
+
+  async renderThumb(thumb) {
+    if (thumb._rendered || thumb._rendering || !this.tab) return;
+    thumb._rendering = true;
+    const tab = this.tab;
+    try {
+      const n = +thumb.dataset.page;
+      const canvas = await this.renderThumbCanvas(n, tab.pdf);
       if (this.tab !== tab) return;
       thumb.querySelector('.thumb-canvas-box').replaceChildren(canvas);
       thumb._rendered = true;

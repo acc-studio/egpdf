@@ -21,8 +21,10 @@ export const editState = {
 let nextId = 1;
 let changedCb = () => {};
 let toolChangedCb = () => {};
+let ocrAreaCb = () => {};
 export function onEditsChanged(cb) { changedCb = cb; }
 export function onToolChanged(cb) { toolChangedCb = cb; }
+export function onOcrArea(cb) { ocrAreaCb = cb; }
 
 export function setTool(tool) {
   editState.tool = tool;
@@ -225,7 +227,7 @@ export function mountEditLayer(tab, pageNum, layer, viewport, holder) {
     if (e.button !== 0) return;
     const vp = layer._viewport;
     const tool = editState.tool;
-    if (tool === 'redact' || tool === 'whiteout' || tool === 'highlight') {
+    if (tool === 'redact' || tool === 'whiteout' || tool === 'highlight' || tool === 'ocrarea') {
       e.preventDefault();
       startRectDrag(tab, pageNum, layer, vp, e, tool);
     } else if (tool === 'text') {
@@ -267,8 +269,13 @@ function startRectDrag(tab, pageNum, layer, viewport, e, kind) {
     const w = Math.abs(cx - sx), h = Math.abs(cy - sy);
     if (w > 4 && h > 4) {
       const rect = cssRectToPdf(viewport, Math.min(sx, cx), Math.min(sy, cy), w, h);
-      const edit = addEdit(tab, { kind, page: pageNum, ...rect });
-      renderItem(tab, edit, layer, viewport);
+      if (kind === 'ocrarea') {
+        // not an edit — the rect goes to the OCR extractor
+        ocrAreaCb(tab, pageNum, rect);
+      } else {
+        const edit = addEdit(tab, { kind, page: pageNum, ...rect });
+        renderItem(tab, edit, layer, viewport);
+      }
     }
   };
   layer.addEventListener('pointermove', update);

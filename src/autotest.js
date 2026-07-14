@@ -6,6 +6,7 @@ import { buildSavedPdf } from './save.js';
 import { loadPdf, viewerDebug } from './viewer.js';
 import { addSelectionRects, editTextFromSelection, commitActiveTextEdits } from './edits.js';
 import { openPrintPreview, closePrintPreview, getPrintState } from './print.js';
+import { cleanOcrWord, cleanOcrFlow, isConfusionVariant } from './ocrbox.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -331,7 +332,66 @@ export async function maybeRunAutotest(ctx) {
       words: ocrText.split(/\s+/).filter(Boolean).length,
       searchMatches: ctx.search.matches.length,
     };
+    // Selection geometry: with Tz width-matching, no word's text-metric width
+    // may spill into the next word on its line by more than a sliver.
+    {
+      const tc = await tabS.pdf.getPage(1).then((p) => p.getTextContent());
+      const byLine = {};
+      for (const it of tc.items) {
+        if (!it.str.trim()) continue;
+        const key = Math.round(it.transform[5] / 5);
+        (byLine[key] ||= []).push(it);
+      }
+      let maxOverlap = 0;
+      for (const arr of Object.values(byLine)) {
+        arr.sort((a, b) => a.transform[4] - b.transform[4]);
+        for (let i = 1; i < arr.length; i++) {
+          const prev = arr[i - 1];
+          const spill = prev.transform[4] + prev.width - arr[i].transform[4];
+          if (prev.width > 0) maxOverlap = Math.max(maxOverlap, spill / prev.width);
+        }
+      }
+      results.ocr.maxOverlap = maxOverlap;
+    }
     await window.native.testCapture(out('t10-ocr.png'));
+
+    // 10b) area OCR: extract the text of a drawn box (whole scan page here)
+    // without touching the document, and verify the popup opens/closes.
+    ctx.search.close();
+    const boxText = await ctx.ops.ocrBox(1, { x: 0, y: 0, w: 600, h: 250 });
+    const ocrPopup = document.getElementById('ocr-popup');
+    results.ocrBox = {
+      text: boxText,
+      turkish: /TARAMA TEST/.test(boxText || ''),
+      english: /scanned document text/.test(boxText || ''),
+      popupVisible: !ocrPopup.classList.contains('hidden'),
+      editsUntouched: tabS.edits.length === 0,
+    };
+    await sleep(400);
+    await window.native.testCapture(out('t11-ocr-box.png'));
+    document.getElementById('ocr-popup-close').click();
+    results.ocrBox.popupClosed = ocrPopup.classList.contains('hidden');
+
+    // 10c) cleanup heuristics (pure functions)
+    results.ocrClean = {
+      merged: cleanOcrWord('kelimeBaşka'),
+      punct: cleanOcrWord('Ancak,davacı'),
+      abbrev: cleanOcrWord('T.C.'),
+      caseNo: cleanOcrWord('2026/713-K'),
+      ligature: cleanOcrWord('ﬁnans'),
+      hyphen: cleanOcrFlow('kelime-\nler devamı'),
+    };
+
+    // 10d) dictionary-backed glyph-confusion repair. The spellchecker depends
+    // on OS dictionaries — when absent (some CI images), only the pure
+    // matcher is asserted.
+    results.ocrSpell = {
+      available: Array.isArray(window.native.spellSuggest('reguested')),
+      fixed: cleanOcrWord('reguested'),
+      validKept: cleanOcrWord('document'),
+      confusion: isConfusionVariant('reguested', 'requested'),
+      notConfusion: isConfusionVariant('reguested', 'regulated'),
+    };
 
     results.ok = true;
   } catch (e) {

@@ -118,6 +118,18 @@ function createWindow() {
 
   mainWindow.loadFile('index.html');
 
+  // The OCR cleanup pass consults the OS spellchecker (via webFrame in the
+  // renderer) to fix glyph confusions like "reguested" → "requested". On
+  // Windows this is the native spellchecker — enable whatever of our two OCR
+  // languages the OS actually has. On macOS language choice is automatic and
+  // this API throws; degrade silently (the cleanup then skips spell fixes).
+  try {
+    const ses = mainWindow.webContents.session;
+    const avail = ses.availableSpellCheckerLanguages || [];
+    const langs = ['en-US', 'en-GB', 'en', 'tr', 'tr-TR'].filter((l) => avail.includes(l));
+    if (langs.length) ses.setSpellCheckerLanguages(langs);
+  } catch { /* native spellchecker manages its own languages */ }
+
   // External links in PDFs open in the default browser, never in-app.
   mainWindow.webContents.on('will-navigate', (e, url) => {
     e.preventDefault();
@@ -259,11 +271,25 @@ ipcMain.handle('ocr:recognize', async (_e, pngData) => {
   const worker = await getOcrWorker();
   const { data } = await worker.recognize(Buffer.from(pngData), {}, { blocks: true });
   const words = [];
+  let paraN = 0, lineN = 0;
   for (const block of data.blocks || []) {
     for (const para of block.paragraphs) {
+      paraN++;
       for (const line of para.lines) {
+        lineN++;
+        // Line geometry travels with each word: the baseline and line height
+        // give the renderer a stable font size and true baseline per line,
+        // instead of guessing from each word's own bbox.
+        const bl = line.baseline;
+        const baseline = bl ? { x0: bl.x0, y0: bl.y0, x1: bl.x1, y1: bl.y1 } : null;
+        const lineH = line.bbox ? line.bbox.y1 - line.bbox.y0 : null;
         for (const w of line.words) {
-          if (w.text.trim()) words.push({ text: w.text, confidence: w.confidence, bbox: w.bbox });
+          if (w.text.trim()) {
+            words.push({
+              text: w.text, confidence: w.confidence, bbox: w.bbox,
+              para: paraN, line: lineN, baseline, lineH,
+            });
+          }
         }
       }
     }

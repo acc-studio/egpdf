@@ -87,11 +87,43 @@ export class DocView {
       for (const en of entries) {
         const n = +en.target.dataset.page;
         dbg(`io p${n} intersecting=${en.isIntersecting}`);
+        en.target._away = !en.isIntersecting;
+        // Pages that scroll out of range are kept rendered — scrolling back
+        // must not flash white. evict() reclaims memory only over budget.
         if (en.isIntersecting) this.renderPage(n);
-        else this.destroyPage(n);
+        else this.scheduleEvict();
       }
     }, { root: this.el, rootMargin: '900px 0px' });
     for (const h of this.holders) this.observer.observe(h);
+  }
+
+  // Rendered pages are cached until their canvases exceed this pixel budget
+  // (~24 typical pages, a few hundred MB of bitmap). Beyond it, the pages
+  // farthest from the viewport are dropped first.
+  static MAX_CACHED_PIXELS = 96e6;
+
+  scheduleEvict() {
+    if (this._evictTimer) return;
+    this._evictTimer = setTimeout(() => { this._evictTimer = null; this.evict(); }, 400);
+  }
+
+  evict() {
+    const mid = this.el.scrollTop + this.el.clientHeight / 2;
+    const away = [];
+    let total = 0;
+    for (const h of this.holders) {
+      const canvas = h.querySelector('canvas');
+      if (!canvas) continue;
+      const px = canvas.width * canvas.height;
+      total += px;
+      if (h._away) away.push({ h, px, dist: Math.abs(h.offsetTop + h.offsetHeight / 2 - mid) });
+    }
+    away.sort((a, b) => b.dist - a.dist);
+    for (const { h, px } of away) {
+      if (total <= DocView.MAX_CACHED_PIXELS) break;
+      this.destroyPage(+h.dataset.page);
+      total -= px;
+    }
   }
 
   // Reparent the view. Detaching an IntersectionObserver's root kills it in
@@ -145,7 +177,7 @@ export class DocView {
     this.scale = scale;
     this.epoch++;
     for (let n = 1; n <= this.holders.length; n++) {
-      this.destroyPage(n);
+      this.markStale(n);
       this.sizeHolder(this.holders[n - 1], n);
     }
     this.el.scrollTop = ratio * this.el.scrollHeight;
@@ -159,12 +191,19 @@ export class DocView {
   }
 
   renderVisible() {
-    const top = this.el.scrollTop - 900;
-    const bottom = this.el.scrollTop + this.el.clientHeight + 900;
+    const top = this.el.scrollTop;
+    const bottom = top + this.el.clientHeight;
+    // Queue truly visible pages before the ±900px prefetch margin, so during
+    // a fast scroll the pixels the user is looking at render first.
+    const deferred = [];
     for (let n = 1; n <= this.holders.length; n++) {
       const h = this.holders[n - 1];
-      if (h.offsetTop + h.offsetHeight >= top && h.offsetTop <= bottom) this.renderPage(n);
+      const hTop = h.offsetTop, hBottom = h.offsetTop + h.offsetHeight;
+      if (hBottom < top - 900 || hTop > bottom + 900) continue;
+      if (hBottom >= top && hTop <= bottom) this.renderPage(n);
+      else deferred.push(n);
     }
+    for (const n of deferred) this.renderPage(n);
   }
 
   trackCurrentPage() {
@@ -284,6 +323,7 @@ export class DocView {
       holder._viewport = viewport;
       holder._rendered = true;
       dbg(`rp p${n} done`);
+      this.scheduleEvict();
       this.onPageRendered(n, holder);
     } catch (e) {
       dbg(`rp p${n} error ${e?.name}: ${e?.message}`);
@@ -293,6 +333,22 @@ export class DocView {
       holder._rendering = false;
       if (retry) queueMicrotask(() => this.renderVisible());
     }
+  }
+
+  // Invalidate a page for re-render (zoom changed) but keep its canvas: the
+  // CSS 100%-sized bitmap stretches to the new holder size, so the old pixels
+  // stay on screen until the fresh render replaces them — no white flash.
+  // The interactive layers (text/annotations/edits) would sit misaligned over
+  // the stretched bitmap, so those are dropped immediately.
+  markStale(n) {
+    const holder = this.holders[n - 1];
+    if (!holder) return;
+    if (holder._task) { try { holder._task.cancel(); } catch {} holder._task = null; }
+    const canvas = holder.querySelector('canvas');
+    if (canvas) holder.replaceChildren(canvas);
+    else holder.replaceChildren();
+    holder._rendered = false;
+    holder._viewport = null;
   }
 
   destroyPage(n) {
@@ -322,6 +378,7 @@ export class DocView {
   hide() { this.el.classList.add('hidden'); }
 
   destroy() {
+    if (this._evictTimer) { clearTimeout(this._evictTimer); this._evictTimer = null; }
     this.observer.disconnect();
     for (let n = 1; n <= this.holders.length; n++) this.destroyPage(n);
     this.el.remove();

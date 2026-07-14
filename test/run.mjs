@@ -127,6 +127,21 @@ const checks = [
   ['OCR: Turkish + English text recognized',
     r.ocr?.turkishFound === true && r.ocr?.englishFound === true && r.ocr?.yearFound === true],
   ['OCR: recognized text is searchable', r.ocr?.searchMatches >= 1],
+  ['OCR area: box text extracted, document untouched',
+    r.ocrBox?.turkish === true && r.ocrBox?.english === true && r.ocrBox?.editsUntouched === true],
+  ['OCR area: popup opens and closes', r.ocrBox?.popupVisible === true && r.ocrBox?.popupClosed === true],
+  ['OCR cleanup: merged words split', r.ocrClean?.merged === 'kelime Başka'],
+  ['OCR cleanup: punctuation spacing', r.ocrClean?.punct === 'Ancak, davacı'],
+  ['OCR cleanup: abbreviations & case numbers untouched',
+    r.ocrClean?.abbrev === 'T.C.' && r.ocrClean?.caseNo === '2026/713-K'],
+  ['OCR cleanup: ligatures + line-end hyphenation',
+    r.ocrClean?.ligature === 'finans' && r.ocrClean?.hyphen === 'kelimeler\ndevamı'],
+  ['OCR spellfix: confusion matcher accepts g↔q, rejects other edits',
+    r.ocrSpell?.confusion === true && r.ocrSpell?.notConfusion === false],
+  ['OCR spellfix: reguested → requested (via OS dictionary)',
+    r.ocrSpell?.available === false || r.ocrSpell?.fixed === 'requested'],
+  ['OCR spellfix: valid words untouched', r.ocrSpell?.validKept === 'document'],
+  ['OCR selection geometry: words do not overlap', (r.ocr?.maxOverlap ?? 1) < 0.15],
 ];
 
 console.log('');
