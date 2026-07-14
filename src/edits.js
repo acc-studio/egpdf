@@ -15,6 +15,7 @@ export const editState = {
   fontFamily: 'Arial',
   pendingImage: null,   // {data, mime, naturalW, naturalH}
   selected: null,       // {tab, edit, el}
+  _activeTextEdit: null, // {edit, tab, el} — uncommitted text edit being typed
 };
 
 let nextId = 1;
@@ -199,12 +200,13 @@ export function editTextFromSelection(tab) {
   const first = locals[0];
   const size = Math.min(72, Math.max(6, Math.round((first.h - 3) / vp.scale * 0.88)));
   const [px, py] = vp.convertToPdfPoint(first.left + 1.5, first.top + 1);
-  const edit = { kind: 'text', page, x: px, yTop: py, size, font: editState.fontFamily, text };
+  const edit = { kind: 'text', page, x: px, yTop: py, size, font: editState.fontFamily, text, _editing: true };
   const layer = holder.querySelector('.edit-layer');
   if (!layer) return false;
   window.getSelection().removeAllRanges();
   const el = renderItem(tab, edit, layer, vp, true);
   el.contentEditable = 'true';
+  editState._activeTextEdit = { edit, tab, el };
   return true;
 }
 
@@ -279,15 +281,20 @@ function createTextItem(tab, pageNum, layer, viewport, cx, cy) {
   const [px, py] = viewport.convertToPdfPoint(cx, cy);
   const edit = {
     kind: 'text', page: pageNum, x: px, yTop: py,
-    size: editState.textSize, font: editState.fontFamily, text: '',
+    size: editState.textSize, font: editState.fontFamily, text: '', _editing: true,
   };
   const el = renderItem(tab, edit, layer, viewport, true);
   el.focus();
+  editState._activeTextEdit = { edit, tab, el };
 }
 
 function commitText(tab, edit, el) {
-  const text = el.innerText.replace(/\n+$/, '');
+  const text = el.isConnected
+    ? el.innerText.replace(/\n+$/, '')
+    : (edit.text || '').replace(/\n+$/, '');
   el.contentEditable = 'false';
+  edit._editing = false;
+  if (editState._activeTextEdit?.edit === edit) editState._activeTextEdit = null;
   if (!text.trim()) {
     if (edit.id) removeEdit(tab, edit); else el.remove();
     return;
@@ -295,6 +302,15 @@ function commitText(tab, edit, el) {
   edit.text = text;
   if (!edit.id) addEdit(tab, edit);
   else changedCb(tab);
+}
+
+export function commitActiveTextEdits() {
+  const at = editState._activeTextEdit;
+  if (at) {
+    const { edit, tab, el } = at;
+    editState._activeTextEdit = null;
+    commitText(tab, edit, el);
+  }
 }
 
 // ---- note (comment) tool ----------------------------------------------------
@@ -368,15 +384,16 @@ function renderItem(tab, edit, layer, viewport, startEditing = false) {
     });
     el.innerText = edit.text;
     el.spellcheck = false;
-    if (startEditing) el.contentEditable = 'true';
     el.addEventListener('blur', () => commitText(tab, edit, el));
     el.addEventListener('dblclick', () => {
+      edit._editing = true;
       el.contentEditable = 'true';
       el.focus();
     });
     el.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.stopPropagation(); el.blur(); }
     });
+    if (startEditing || edit._editing) el.contentEditable = 'true';
   } else if (edit.kind === 'note') {
     const [lx, ly] = viewport.convertToViewportPoint(edit.x, edit.yTop);
     Object.assign(el.style, { left: lx + 'px', top: ly + 'px' });

@@ -1,5 +1,5 @@
 ﻿import * as pdfjsLib from 'pdfjs-dist';
-import { mountEditLayer } from './edits.js';
+import { mountEditLayer, commitActiveTextEdits } from './edits.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = './dist/pdf.worker.min.mjs';
 
@@ -312,6 +312,7 @@ export class DocView {
     if (!holder || !holder._rendered) return;
     const layer = holder.querySelector('.edit-layer');
     if (layer) {
+      commitActiveTextEdits();
       layer.replaceChildren();
       mountEditLayer(this.tab, pageNum, layer, holder._viewport, holder, true);
     }

@@ -4,11 +4,11 @@ import {
 } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { pdfjsLib } from './viewer.js';
-import { fontFilePath } from './fonts.js';
 
-// Per-family font loader: embeds the matching Windows TTF (subset) so text
+// Per-family font loader: embeds the matching system TTF (subset) so text
 // edits keep their chosen face and non-ASCII text (ğ, ş, İ, …) survives.
-// Falls back Arial → Helvetica (WinAnsi only) if files are missing.
+// The path is resolved in the main process (host filesystem) and bridged in;
+// falls back to Helvetica if a face is missing.
 function makeFontLoader(doc) {
   const cache = new Map();
   let fontkitRegistered = false;
@@ -16,7 +16,9 @@ function makeFontLoader(doc) {
     const key = family || 'Arial';
     if (cache.has(key)) return cache.get(key);
     let font = null;
-    const candidates = [...new Set([fontFilePath(key), fontFilePath('Arial')])];
+    const candidates = [...new Set(
+      [await window.native.fontPath(key), await window.native.fontPath('Arial')].filter(Boolean),
+    )];
     for (const p of candidates) {
       try {
         const buf = await window.native.readFile(p);

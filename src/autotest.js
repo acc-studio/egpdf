@@ -3,7 +3,7 @@
 // the full save pipeline, and reopening the saved file.
 import { buildSavedPdf } from './save.js';
 import { loadPdf, viewerDebug } from './viewer.js';
-import { addSelectionRects, editTextFromSelection } from './edits.js';
+import { addSelectionRects, editTextFromSelection, commitActiveTextEdits } from './edits.js';
 import { openPrintPreview, closePrintPreview, getPrintState } from './print.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -31,7 +31,10 @@ function makeTestImageB64() {
 export async function maybeRunAutotest(ctx) {
   const dir = await window.native.getTestConfig();
   if (!dir) return;
-  const out = (name) => dir + '\\' + name;
+  // Join with the host's separator (the dir is passed in OS-native form).
+  const sep = dir.includes('\\') ? '\\' : '/';
+  const base = dir.endsWith(sep) ? dir : dir + sep;
+  const out = (name) => base + name;
   const results = {};
   const logs = [];
   for (const m of ['warn', 'error']) {
@@ -120,12 +123,8 @@ export async function maybeRunAutotest(ctx) {
       const selText = window.getSelection().toString().trim();
       const started = editTextFromSelection(tab);
       await sleep(300);
-      // commit the pre-filled text box: blur it whether or not focus landed
-      const editingEl = tab.view.holders[2].querySelector('.edit-item.textedit[contenteditable="true"]');
-      if (editingEl) {
-        if (document.activeElement === editingEl) editingEl.blur();
-        else editingEl.dispatchEvent(new Event('blur'));
-      }
+      // commit the pre-filled text box
+      commitActiveTextEdits();
       await sleep(200);
       const textEdit = tab.edits.find((e) => e.kind === 'text' && e.page === 3);
       const whiteEdit = tab.edits.find((e) => e.kind === 'whiteout' && e.page === 3);

@@ -2,7 +2,7 @@
 
 <h1 align="center">egPDF</h1>
 
-<p align="center">Minimal, fully local desktop PDF reader &amp; editor for Windows.<br>
+<p align="center">Minimal, fully local desktop PDF reader &amp; editor for Windows, macOS, and Linux.<br>
 No network access, no accounts, no telemetry — your files never leave your machine.</p>
 
 <p align="center">
@@ -13,13 +13,17 @@ No network access, no accounts, no telemetry — your files never leave your mac
 
 ## Download
 
-### [⬇ Download egPDF for Windows](https://github.com/acc-studio/egpdf/releases/latest/download/egPDF-Setup.exe)
+All versions are on the [releases page](https://github.com/acc-studio/egpdf/releases).
 
-One-click installer, per-user, no admin rights needed. All versions are on the
-[releases page](https://github.com/acc-studio/egpdf/releases).
+- **Windows** — [⬇ egPDF-Setup.exe](https://github.com/acc-studio/egpdf/releases/latest/download/egPDF-Setup.exe) (one-click installer, per-user, no admin rights)
+- **macOS** — [⬇ egPDF.dmg](https://github.com/acc-studio/egpdf/releases/latest/download/egPDF.dmg)
+- **Linux** — [⬇ egPDF.AppImage](https://github.com/acc-studio/egpdf/releases/latest/download/egPDF.AppImage)
 
-> The installer is not code-signed, so Windows SmartScreen may show a warning —
-> choose **More info → Run anyway**, or build from source below.
+> The Windows installer is not code-signed, so SmartScreen may warn — choose
+> **More info → Run anyway**, or build from source below. macOS/Linux builds are
+> likewise unsigned; macOS users may need to allow the app in **System
+> Settings → Privacy & Security**, and Linux users may need to `chmod +x` the
+> AppImage.
 
 ## Screenshots
 
@@ -42,7 +46,7 @@ One-click installer, per-user, no admin rights needed. All versions are on the
 - **Redact (R)** — drag a box; on save the page is re-rendered to an image with the box burned in, so the underlying text is *actually removed* from the file.
 - **Whiteout (W)** — cover an area with white.
 - **Highlight (H)** — translucent yellow marker.
-- **Text (T)** — click to add text. Font and size dropdowns appear in the toolbar (native Windows fonts: Arial, Calibri, Georgia, Times New Roman, Segoe UI, Verdana, …); the chosen font is embedded (subset) into the PDF on save, Unicode included. Double-click to re-edit.
+- **Text (T)** — click to add text. Font and size dropdowns appear in the toolbar; the list shows the fonts actually installed on your machine, and the chosen font is embedded (subset) into the PDF on save, Unicode included. Double-click to re-edit.
 - **Image (I)** — insert PNG/JPEG, drag to move, corner handle to resize.
 - **Comment (C)** — click to attach a sticky-note; saved as a real PDF annotation visible in any viewer.
 - **Select (V)** — move/resize/delete edits (`Del`), undo (`Ctrl+Z`).
@@ -57,11 +61,13 @@ npm install
 npm start
 ```
 
-## Installer (+ .pdf file association)
+## Installer / packages
 
 ```
 npm run dist
 ```
 
-Produces `release/egPDF Setup <version>.exe`. After installing, right-click any PDF →
-**Open with → Choose another app → egPDF → Always** (or Settings → Apps → Default apps) to make it the default PDF app.
+Builds a native package for the current platform (DMG on macOS, NSIS installer
+on Windows, AppImage + deb on Linux). After installing on Windows, right-click
+any PDF → **Open with → Choose another app → egPDF → Always** to make it the
+default PDF app.

@@ -1,6 +1,63 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { homedir } = require('os');
+
+// System font directories per platform. We embed the matching TTF (subset) on
+// save so the PDF looks identical everywhere. Only plain .ttf files are usable
+// — .ttc collections (Helvetica, Times, etc. on macOS) can't be embedded
+// directly by pdf-lib, so they're skipped automatically by the availability
+// probe below. The dropdown only ever shows fonts actually installed on the
+// host, so the list differs per OS.
+const FONT_FAMILIES = [
+  { name: 'Arial', file: 'arial.ttf', linux: 'LiberationSans-Regular.ttf' },
+  { name: 'Calibri', file: 'calibri.ttf' },
+  { name: 'Comic Sans MS', file: 'comic.ttf', linux: 'ComicNeue-Regular.ttf' },
+  { name: 'Consolas', file: 'consola.ttf', linux: 'DejaVuSansMono.ttf' },
+  { name: 'Courier New', file: 'cour.ttf', linux: 'LiberationMono-Regular.ttf' },
+  { name: 'Georgia', file: 'georgia.ttf', linux: 'LiberationSerif-Regular.ttf' },
+  { name: 'Impact', file: 'impact.ttf' },
+  { name: 'Segoe UI', file: 'segoeui.ttf' },
+  { name: 'Tahoma', file: 'tahoma.ttf' },
+  { name: 'Times New Roman', file: 'times.ttf', linux: 'LiberationSerif-Regular.ttf' },
+  { name: 'Trebuchet MS', file: 'trebuc.ttf' },
+  { name: 'Verdana', file: 'verdana.ttf', linux: 'DejaVuSans.ttf' },
+];
+
+const PLATFORM_DIRS = {
+  win32: ['C:\\Windows\\Fonts\\'],
+  darwin: [
+    '/System/Library/Fonts/Supplemental/',
+    '/System/Library/Fonts/',
+    '/Library/Fonts/',
+  ],
+  linux: [
+    '/usr/share/fonts/truetype/',
+    '/usr/share/fonts/',
+    '/usr/local/share/fonts/',
+    `${homedir()}/.fonts/`,
+  ],
+};
+
+function fontFileName(family) {
+  if (process.platform === 'linux' && family.linux) return family.linux;
+  return family.file;
+}
+
+function searchDirs() {
+  return PLATFORM_DIRS[process.platform] || PLATFORM_DIRS.linux;
+}
+
+// Absolute path of an installed font for a family, or null if absent.
+function resolveFontPath(name) {
+  const family = FONT_FAMILIES.find((x) => x.name === name);
+  const file = family ? fontFileName(family) : 'arial.ttf';
+  for (const dir of searchDirs()) {
+    const p = dir + file;
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
 
 let mainWindow = null;
 let pendingPaths = [];
@@ -149,6 +206,16 @@ ipcMain.handle('fs:exists-many', (_e, paths) =>
   (Array.isArray(paths) ? paths : []).filter((p) => {
     try { return typeof p === 'string' && fs.existsSync(p); } catch { return false; }
   }));
+
+// Fonts: resolve the host's installed faces so the renderer can show only what
+// is actually available and embed the right file on save.
+ipcMain.handle('font:families', () => {
+  const found = FONT_FAMILIES
+    .map((f) => ({ name: f.name, path: resolveFontPath(f.name) }))
+    .filter((f) => f.path);
+  return found.length ? found : [{ name: 'Arial', path: null }];
+});
+ipcMain.handle('font:path', (_e, name) => resolveFontPath(name || 'Arial'));
 
 ipcMain.handle('print:list', async () => {
   try { return await mainWindow.webContents.getPrintersAsync(); } catch { return []; }

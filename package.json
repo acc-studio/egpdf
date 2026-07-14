@@ -9,7 +9,7 @@
     "start": "npm run build && electron .",
     "test": "node test/run.mjs",
     "test:packaged": "node test/run.mjs --packaged",
-    "dist": "npm run build && electron-builder --win --publish never"
+    "dist": "npm run build && electron-builder --mac --win --linux --publish never"
   },
   "author": "Aziz Can Cengiz",
   "license": "MIT",
@@ -30,6 +30,16 @@
     ],
     "win": {
       "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "build/icon.png",
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Office",
       "icon": "build/icon.png"
     },
     "nsis": {
