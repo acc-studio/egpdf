@@ -53,8 +53,17 @@ function resolveFontPath(name) {
   const family = FONT_FAMILIES.find((x) => x.name === name);
   const file = family ? fontFileName(family) : 'arial.ttf';
   for (const dir of searchDirs()) {
-    const p = dir + file;
-    if (fs.existsSync(p)) return p;
+    const direct = dir + file;
+    if (fs.existsSync(direct)) return direct;
+    // Debian/Ubuntu package their bundled TTFs one directory deeper, e.g.
+    // /usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf.
+    try {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const nested = path.join(dir, entry.name, file);
+        if (fs.existsSync(nested)) return nested;
+      }
+    } catch { /* dir doesn't exist or isn't listable */ }
   }
   return null;
 }
