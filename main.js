@@ -126,7 +126,8 @@ function createWindow() {
   try {
     const ses = mainWindow.webContents.session;
     const avail = ses.availableSpellCheckerLanguages || [];
-    const langs = ['en-US', 'en-GB', 'en', 'tr', 'tr-TR'].filter((l) => avail.includes(l));
+    const langs = ['en-US', 'en-GB', 'en', 'tr', 'tr-TR', 'de', 'de-DE', 'ar', 'ar-SA']
+      .filter((l) => avail.includes(l));
     if (langs.length) ses.setSpellCheckerLanguages(langs);
   } catch { /* native spellchecker manages its own languages */ }
 
@@ -238,6 +239,15 @@ ipcMain.handle('font:families', () => {
 });
 ipcMain.handle('font:path', (_e, name) => resolveFontPath(name || 'Arial'));
 
+// Bundled OCR-repair word lists (vendor/dict, unpacked from the asar like the
+// OCR models). The renderer parses them; empty string = list unavailable.
+ipcMain.handle('dict:text', (_e, lang) => {
+  if (!['en', 'tr', 'de', 'ar'].includes(lang)) return '';
+  const p = path.join(__dirname, 'vendor', 'dict', `${lang}.txt`)
+    .replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+  try { return fs.readFileSync(p, 'utf8'); } catch { return ''; }
+});
+
 // OCR (Tesseract, fully local). The engine and the tur+eng language models
 // ship inside the app — nothing is ever fetched from the network. Runs in the
 // main process (Node worker_threads) so the renderer stays responsive; the
@@ -255,7 +265,10 @@ function getOcrWorker() {
   if (!ocrWorkerPromise) {
     ocrWorkerPromise = (async () => {
       const { createWorker, OEM } = require('tesseract.js');
-      return createWorker(['tur', 'eng'], OEM.LSTM_ONLY, {
+      // The bundled models are tessdata_best_int (integerized best): the
+      // float tessdata_best models abort the wasm core with "missing
+      // function: DotProductSSE" — only integer LSTM models are supported.
+      return createWorker(['tur', 'eng', 'ara', 'deu'], OEM.LSTM_ONLY, {
         langPath: ocrLangDir(),
         gzip: false,
         cacheMethod: 'none',
@@ -267,8 +280,21 @@ function getOcrWorker() {
   return ocrWorkerPromise;
 }
 
-ipcMain.handle('ocr:recognize', async (_e, pngData) => {
+// Page-segmentation mode: full pages get real layout analysis (AUTO),
+// user-drawn boxes are a single block of text.
+let ocrPsm = null;
+async function setOcrPsm(worker, mode) {
+  const { PSM } = require('tesseract.js');
+  const psm = mode === 'area' ? PSM.SINGLE_BLOCK : PSM.AUTO;
+  if (psm !== ocrPsm) {
+    await worker.setParameters({ tessedit_pageseg_mode: psm });
+    ocrPsm = psm;
+  }
+}
+
+ipcMain.handle('ocr:recognize', async (_e, pngData, mode) => {
   const worker = await getOcrWorker();
+  await setOcrPsm(worker, mode);
   const { data } = await worker.recognize(Buffer.from(pngData), {}, { blocks: true });
   const words = [];
   let paraN = 0, lineN = 0;
@@ -288,6 +314,8 @@ ipcMain.handle('ocr:recognize', async (_e, pngData) => {
             words.push({
               text: w.text, confidence: w.confidence, bbox: w.bbox,
               para: paraN, line: lineN, baseline, lineH,
+              // alternative readings, for the dictionary rescorer
+              choices: (w.choices || []).map((c) => ({ text: c.text, confidence: c.confidence })),
             });
           }
         }

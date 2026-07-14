@@ -5,7 +5,7 @@
 import { PDFDocument, PDFNumber, PDFOperator, PDFOperatorNames, degrees } from 'pdf-lib';
 import { loadPdf } from './viewer.js';
 import { makeFontLoader } from './save.js';
-import { cleanOcrWord } from './ocrbox.js';
+import { cleanOcrWord, ensureDictLoaded, pickWordText, preprocessForOcr } from './ocrbox.js';
 
 const MIN_CONFIDENCE = 35;
 
@@ -37,6 +37,7 @@ async function renderPageImage(pdf, n) {
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   await page.render({ canvasContext: ctx, viewport, intent: 'print' }).promise;
+  preprocessForOcr(ctx, canvas.width, canvas.height);
   const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
   return { png: new Uint8Array(await blob.arrayBuffer()), viewport };
 }
@@ -71,6 +72,7 @@ const setHScale = (percent) =>
 // with an invisible text layer baked in. `stats.words` reports the total for
 // the caller's status message.
 export async function ocrRun(bytes, pageNums, onProgress, stats = {}) {
+  const dictReady = ensureDictLoaded(); // cleanOcrWord consults it below
   const src = new Uint8Array(bytes);
   const pdf = await loadPdf(src.slice()); // pdf.js may take ownership of its copy
   const recognized = [];
@@ -79,15 +81,39 @@ export async function ocrRun(bytes, pageNums, onProgress, stats = {}) {
     for (const n of pageNums) {
       onProgress?.(++i, pageNums.length, n);
       const { png, viewport } = await renderPageImage(pdf, n);
-      const words = await window.native.ocrRecognize(png);
+      const words = await window.native.ocrRecognize(png, 'page');
       recognized.push({ n, viewport, words });
     }
   } finally {
     pdf.destroy();
   }
 
+  await dictReady;
   const doc = await PDFDocument.load(src, { ignoreEncryption: true });
-  const font = await makeFontLoader(doc)('Arial');
+
+  // The text layer needs a font with glyphs for whatever the page contains —
+  // Arabic in particular isn't covered by Arial's stand-ins on Linux/web, so
+  // fall through the available families per word. Fonts load (and embed)
+  // lazily: a Latin-only document never touches the later families.
+  const loadFont = makeFontLoader(doc);
+  const famNames = ['Arial'];
+  try {
+    for (const f of await window.native.fontFamilies()) {
+      if (!famNames.includes(f.name)) famNames.push(f.name);
+    }
+  } catch { /* keep just Arial */ }
+  const fontInfos = [];
+  const pickFont = async (text) => {
+    for (let i = 0; i < famNames.length; i++) {
+      if (i === fontInfos.length) {
+        const font = await loadFont(famNames[i]);
+        fontInfos.push({ font, chars: new Set(font.getCharacterSet()) });
+      }
+      const fi = fontInfos[i];
+      if ([...text].every((ch) => fi.chars.has(ch.codePointAt(0)))) return fi.font;
+    }
+    return null;
+  };
   let total = 0;
   for (const { n, viewport, words } of recognized) {
     const page = doc.getPage(n - 1);
@@ -96,9 +122,12 @@ export async function ocrRun(bytes, pageNums, onProgress, stats = {}) {
       if (w.confidence < MIN_CONFIDENCE) continue;
       const { x, y, angle, size, width } = placeWord(viewport, w);
       try {
+        // pickWordText prefers a dictionary-backed engine alternative;
         // cleanOcrWord fixes merged words, ligatures, and glyph confusions;
         // the corrected text is drawn at the original bbox.
-        const text = cleanOcrWord(w.text);
+        const text = cleanOcrWord(pickWordText(w));
+        const font = await pickFont(text);
+        if (!font) continue; // no available font covers these glyphs
         // Horizontally scale the word (Tz) so its text-metric width equals
         // the printed word's width — selection and search-highlight boxes
         // then end exactly where the visible word ends.

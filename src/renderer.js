@@ -630,7 +630,10 @@ function applyTypedZoom() {
   const el = $('zoom-input');
   const n = parseInt(el.value.replace('%', '').trim(), 10);
   if (active && n >= 20 && n <= 600) active.view.setZoom(n / 100);
-  el.blur(); // blur refreshes the field to the actual applied zoom
+  el.blur();
+  // refresh explicitly — the blur event alone isn't delivered reliably when
+  // the window is unfocused (e.g. during the self-test)
+  updateZoomLabel();
 }
 
 function zoomBy(f) {

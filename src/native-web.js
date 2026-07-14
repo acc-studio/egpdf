@@ -4,7 +4,7 @@
 // without it), fonts from bundled open-licensed TTFs, and OCR through
 // tesseract.js in a Web Worker using the same tur+eng models the desktop app
 // ships. No document data ever leaves the machine.
-import { createWorker, OEM } from 'tesseract.js';
+import { createWorker, OEM, PSM } from 'tesseract.js';
 
 // Bundled faces (Liberation: metric-compatible replacements for Arial /
 // Times New Roman / Courier New, SIL OFL licensed — see fonts/LICENSE-*).
@@ -12,6 +12,8 @@ const FONTS = [
   { name: 'Liberation Sans', file: 'LiberationSans-Regular.ttf' },
   { name: 'Liberation Serif', file: 'LiberationSerif-Regular.ttf' },
   { name: 'Liberation Mono', file: 'LiberationMono-Regular.ttf' },
+  // Arabic glyphs for the invisible OCR text layer (Liberation has none)
+  { name: 'Noto Sans Arabic', file: 'NotoSansArabic-Regular.ttf' },
 ];
 // Desktop family names that map cleanly onto a bundled face (the OCR layer
 // and saved docs ask for 'Arial').
@@ -63,9 +65,10 @@ const PDF_TYPES = [{ description: 'PDF documents', accept: { 'application/pdf': 
 
 // ---- OCR (tesseract.js in a Web Worker, models served as static assets) -----
 let ocrWorkerPromise = null;
+let lastPsm = null;
 function getOcrWorker() {
   if (!ocrWorkerPromise) {
-    ocrWorkerPromise = createWorker(['tur', 'eng'], OEM.LSTM_ONLY, {
+    ocrWorkerPromise = createWorker(['tur', 'eng', 'ara', 'deu'], OEM.LSTM_ONLY, {
       workerPath: '/tess/worker.min.js',
       corePath: '/tess/core',
       langPath: '/tessdata',
@@ -97,6 +100,8 @@ function flattenBlocks(data) {
             words.push({
               text: w.text, confidence: w.confidence, bbox: w.bbox,
               para: paraN, line: lineN, baseline, lineH,
+              // alternative readings, for the dictionary rescorer
+              choices: (w.choices || []).map((c) => ({ text: c.text, confidence: c.confidence })),
             });
           }
         }
@@ -194,15 +199,27 @@ export function createNativeWeb() {
     },
     async fontPath(name) { return fontFile(name); },
 
-    async ocrRecognize(png) {
+    async ocrRecognize(png, mode) {
       const worker = await getOcrWorker();
+      // full pages get real layout analysis, user boxes are one block
+      const psm = mode === 'area' ? PSM.SINGLE_BLOCK : PSM.AUTO;
+      if (psm !== lastPsm) {
+        await worker.setParameters({ tessedit_pageseg_mode: psm });
+        lastPsm = psm;
+      }
       const blob = new Blob([png], { type: 'image/png' });
       const { data } = await worker.recognize(blob, {}, { blocks: true });
       return flattenBlocks(data);
     },
 
-    // No local dictionary in the browser — the OCR cleanup pass skips its
-    // spellcheck stage (heuristic fixes still apply).
+    // Bundled OCR-repair word lists, served as static assets.
+    async dictText(lang) {
+      const res = await fetch(`dict/${lang}.txt`);
+      return res.ok ? await res.text() : '';
+    },
+
+    // No OS spellchecker in the browser — the bundled dictionaries above
+    // carry the spellfix stage instead.
     spellSuggest() { return null; },
 
     async listPrinters() {

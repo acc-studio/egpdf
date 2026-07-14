@@ -32,6 +32,8 @@ cpSync('web/fonts', 'web-dist/fonts', { recursive: true });
 // OCR: language models + tesseract worker + wasm cores (LSTM variants only —
 // that's the engine mode the app uses)
 cpSync('vendor/tessdata', 'web-dist/tessdata', { recursive: true });
+// OCR-repair word lists (license file ships alongside)
+cpSync('vendor/dict', 'web-dist/dict', { recursive: true });
 cpSync('node_modules/tesseract.js/dist/worker.min.js', 'web-dist/tess/worker.min.js');
 for (const f of [
   'tesseract-core-lstm.wasm.js',

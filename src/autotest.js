@@ -6,7 +6,7 @@ import { buildSavedPdf } from './save.js';
 import { loadPdf, viewerDebug } from './viewer.js';
 import { addSelectionRects, editTextFromSelection, commitActiveTextEdits } from './edits.js';
 import { openPrintPreview, closePrintPreview, getPrintState } from './print.js';
-import { cleanOcrWord, cleanOcrFlow, isConfusionVariant } from './ocrbox.js';
+import { assembleOcrText, cleanOcrWord, cleanOcrFlow, isConfusionVariant, ensureDictLoaded } from './ocrbox.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -377,7 +377,9 @@ export async function maybeRunAutotest(ctx) {
     document.getElementById('ocr-popup-close').click();
     results.ocrBox.popupClosed = ocrPopup.classList.contains('hidden');
 
-    // 10c) cleanup heuristics (pure functions)
+    // 10c) cleanup heuristics (pure functions; the word-level ones consult
+    // the bundled dictionaries, so load them first)
+    await ensureDictLoaded();
     results.ocrClean = {
       merged: cleanOcrWord('kelimeBaşka'),
       punct: cleanOcrWord('Ancak,davacı'),
@@ -385,15 +387,29 @@ export async function maybeRunAutotest(ctx) {
       caseNo: cleanOcrWord('2026/713-K'),
       ligature: cleanOcrWord('ﬁnans'),
       hyphen: cleanOcrFlow('kelime-\nler devamı'),
+      // wrapped prose flows again: same-paragraph lines join with a space
+      // (hyphenated words merge), paragraphs stay separate
+      unwrap: assembleOcrText([
+        { text: 'Bu', confidence: 90, para: 1, line: 1 },
+        { text: 'kelime-', confidence: 90, para: 1, line: 1 },
+        { text: 'ler', confidence: 90, para: 1, line: 2 },
+        { text: 'uzun', confidence: 90, para: 1, line: 2 },
+        { text: 'Yeni', confidence: 90, para: 2, line: 3 },
+        { text: 'paragraf', confidence: 90, para: 2, line: 3 },
+      ]),
     };
 
-    // 10d) dictionary-backed glyph-confusion repair. The spellchecker depends
-    // on OS dictionaries — when absent (some CI images), only the pure
-    // matcher is asserted.
+    // 10d) dictionary-backed glyph-confusion repair. The bundled tr+en lists
+    // make this deterministic on every platform; `available` still reports
+    // whether the OS-spellchecker fallback exists (informational only).
     results.ocrSpell = {
       available: Array.isArray(window.native.spellSuggest('reguested')),
       fixed: cleanOcrWord('reguested'),
       validKept: cleanOcrWord('document'),
+      turkish: cleanOcrWord('davaci'),        // dotless ı lost by the engine → restored
+      turkishSolid: cleanOcrWord('mahkeme'),  // valid Turkish stays untouched
+      german: cleanOcrWord('Gerlcht'),        // l↔i against the German dictionary
+      arabic: cleanOcrWord('مستسفى'),         // س↔ش dot confusion
       confusion: isConfusionVariant('reguested', 'requested'),
       notConfusion: isConfusionVariant('reguested', 'regulated'),
     };

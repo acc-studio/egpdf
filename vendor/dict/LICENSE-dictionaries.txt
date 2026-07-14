@@ -1,0 +1,16 @@
+Bundled word-frequency dictionaries used by the OCR cleanup pass.
+
+en.txt — English frequency dictionary (82,765 words)
+  Source: SymSpell (https://github.com/wolfgarbe/SymSpell),
+  frequency_dictionary_en_82_765.txt. Derived from the Google Books
+  Ngram corpus and SCOWL. License: MIT (Copyright (c) 2025 Wolf Garbe).
+
+tr.txt / de.txt / ar.txt — Turkish, German, and Arabic frequency
+  dictionaries (up to 300,000 most frequent forms each)
+  Source: FrequencyWords (https://github.com/hermitdave/FrequencyWords),
+  content/2018/<lang>/<lang>_full.txt, filtered to all-letter forms with
+  corpus frequency >= 5. Derived from the OpenSubtitles2018 corpus
+  (http://opus.nlpl.eu/OpenSubtitles2018.php).
+  License: CC-BY-SA-4.0 (https://creativecommons.org/licenses/by-sa/4.0/).
+  These trimmed lists are derivative works and are likewise available under
+  CC-BY-SA-4.0.
