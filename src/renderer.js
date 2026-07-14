@@ -831,6 +831,10 @@ window.addEventListener('resize', refitAll);
 
 native.onOpenPaths((paths) => openPaths(paths));
 
+// Programmatic open hook — used by the web build's smoke test and available
+// to anything embedding the app.
+window.egpdfOpenBytes = (bytes, name) => openBytes(bytes, name);
+
 updateZoomLabel();
 setTool('select');
 

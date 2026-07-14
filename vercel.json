@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "node build-web.mjs",
+  "outputDirectory": "web-dist",
+  "installCommand": "npm install --ignore-scripts",
+  "framework": null,
+  "headers": [
+    {
+      "source": "/(tessdata|tess|fonts)/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ]
+}

@@ -31,6 +31,10 @@ All versions are on the [releases page](https://github.com/acc-studio/egpdf/rele
 | --- | --- | --- |
 | ![Viewer with highlight and text edit](docs/screenshot-viewer.png) | ![Two documents compared side by side](docs/screenshot-compare.png) | ![M365-style print preview](docs/screenshot-print.png) |
 
+## Web version
+
+The full suite also runs in the browser at **https://egpdf.vercel.app** — same viewer, editing tools, and OCR (Turkish + English, via WebAssembly). It is a static site with no server component: documents are opened with the browser's file APIs and never leave your machine. Differences from the desktop app: fonts come bundled (Liberation family, metric-compatible with Arial/Times/Courier) instead of your system fonts, printing goes through the browser's print dialog, and the OCR spellcheck-repair stage is desktop-only. Build it locally with `node build-web.mjs` → `web-dist/`.
+
 ## Viewing
 
 - **Tabs** — open many PDFs (drag & drop anywhere, `Ctrl+O`, middle-click a tab to close, `Ctrl+Tab` to switch).
