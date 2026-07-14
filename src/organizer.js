@@ -1,9 +1,9 @@
-// Thumbnail sidebar: page previews with drag-to-reorder, rotate and delete.
+// Thumbnail sidebar: page previews with drag-to-reorder, rotate, OCR and delete.
 import { ICONS } from './icons.js';
 
 export class Organizer {
   /**
-   * opts: { el, onReorder(from,to), onRotate(n), onDelete(n), onSelect(n) }
+   * opts: { el, onReorder(from,to), onRotate(n), onOcr(n), onDelete(n), onSelect(n) }
    * (page numbers are 1-based; from/to are 0-based indices)
    */
   constructor(opts) {
@@ -34,6 +34,7 @@ export class Organizer {
         <div class="thumb-canvas-box"></div>
         <div class="thumb-actions">
           <button class="th-rotate" title="Rotate 90°">${ICONS.rotate}</button>
+          <button class="th-ocr" title="OCR this page — make its text searchable">${ICONS.ocr}</button>
           <button class="th-delete" title="Delete page">${ICONS.trash}</button>
         </div>
         <div class="thumb-num">${n}</div>`;
@@ -42,6 +43,7 @@ export class Organizer {
         this.opts.onSelect(n);
       });
       thumb.querySelector('.th-rotate').addEventListener('click', () => this.opts.onRotate(n));
+      thumb.querySelector('.th-ocr').addEventListener('click', () => this.opts.onOcr(n));
       thumb.querySelector('.th-delete').addEventListener('click', () => this.opts.onDelete(n));
 
       thumb.addEventListener('dragstart', (e) => {

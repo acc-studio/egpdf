@@ -1,6 +1,7 @@
 ﻿// End-to-end self-test, active only with --autotest=<outputDir>.
 // Exercises: edit tools model, redaction rasterization, form filling,
 // the full save pipeline, and reopening the saved file.
+import { PDFDocument } from 'pdf-lib';
 import { buildSavedPdf } from './save.js';
 import { loadPdf, viewerDebug } from './viewer.js';
 import { addSelectionRects, editTextFromSelection, commitActiveTextEdits } from './edits.js';
@@ -288,6 +289,49 @@ export async function maybeRunAutotest(ctx) {
     results.print.pageInfo2 = document.getElementById('pp-pageinfo').textContent;
     closePrintPreview();
     results.print.closed = overlay.classList.contains('hidden') && container.children.length === 0;
+
+    // 10) OCR: build an image-only "scan" (canvas text → PNG → PDF with no
+    // text layer), open it, OCR it, and verify the text became extractable
+    // and searchable.
+    const scanCanvas = document.createElement('canvas');
+    scanCanvas.width = 1200;
+    scanCanvas.height = 500;
+    const sctx = scanCanvas.getContext('2d');
+    sctx.fillStyle = '#fff';
+    sctx.fillRect(0, 0, 1200, 500);
+    sctx.fillStyle = '#111';
+    sctx.font = 'bold 64px Arial, sans-serif';
+    sctx.fillText('TARAMA TEST 2026', 80, 170);
+    sctx.font = '52px Arial, sans-serif';
+    sctx.fillText('scanned document text', 80, 330);
+    const scanBlob = await new Promise((r) => scanCanvas.toBlob(r, 'image/png'));
+    const scanPng = new Uint8Array(await scanBlob.arrayBuffer());
+    const scanDoc = await PDFDocument.create();
+    const scanImg = await scanDoc.embedPng(scanPng);
+    const sp = scanDoc.addPage([600, 250]);
+    sp.drawImage(scanImg, { x: 0, y: 0, width: 600, height: 250 });
+    await window.native.writeFile(out('scan.pdf'), await scanDoc.save());
+    await ctx.openPaths([out('scan.pdf')]);
+    const tabS = ctx.getActive();
+    await waitFor(() => tabS.view.holders[0]?._rendered, 'scan p1');
+    const preItems = (await tabS.pdf.getPage(1).then((p) => p.getTextContent()))
+      .items.filter((i) => i.str.trim()).length;
+    await ctx.ops.ocr();
+    await waitFor(() => tabS.view.holders[0]?._rendered, 'scan ocr p1');
+    await sleep(400);
+    const ocrText = (await tabS.pdf.getPage(1).then((p) => p.getTextContent()))
+      .items.map((i) => i.str).join(' ');
+    await ctx.search.run('tarama');
+    await sleep(500);
+    results.ocr = {
+      preTextItems: preItems,
+      turkishFound: /TARAMA/i.test(ocrText),
+      yearFound: ocrText.includes('2026'),
+      englishFound: /scanned/i.test(ocrText),
+      words: ocrText.split(/\s+/).filter(Boolean).length,
+      searchMatches: ctx.search.matches.length,
+    };
+    await window.native.testCapture(out('t10-ocr.png'));
 
     results.ok = true;
   } catch (e) {

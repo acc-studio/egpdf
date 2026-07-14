@@ -226,6 +226,51 @@ ipcMain.handle('font:families', () => {
 });
 ipcMain.handle('font:path', (_e, name) => resolveFontPath(name || 'Arial'));
 
+// OCR (Tesseract, fully local). The engine and the tur+eng language models
+// ship inside the app — nothing is ever fetched from the network. Runs in the
+// main process (Node worker_threads) so the renderer stays responsive; the
+// worker is created lazily on first use and reused across pages.
+let ocrWorkerPromise = null;
+
+function ocrLangDir() {
+  // vendor/ is unpacked from the asar so the OCR worker thread can read the
+  // model files with plain fs.
+  return path.join(__dirname, 'vendor', 'tessdata')
+    .replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+}
+
+function getOcrWorker() {
+  if (!ocrWorkerPromise) {
+    ocrWorkerPromise = (async () => {
+      const { createWorker, OEM } = require('tesseract.js');
+      return createWorker(['tur', 'eng'], OEM.LSTM_ONLY, {
+        langPath: ocrLangDir(),
+        gzip: false,
+        cacheMethod: 'none',
+      });
+    })();
+    // A failed init shouldn't poison every later attempt.
+    ocrWorkerPromise.catch(() => { ocrWorkerPromise = null; });
+  }
+  return ocrWorkerPromise;
+}
+
+ipcMain.handle('ocr:recognize', async (_e, pngData) => {
+  const worker = await getOcrWorker();
+  const { data } = await worker.recognize(Buffer.from(pngData), {}, { blocks: true });
+  const words = [];
+  for (const block of data.blocks || []) {
+    for (const para of block.paragraphs) {
+      for (const line of para.lines) {
+        for (const w of line.words) {
+          if (w.text.trim()) words.push({ text: w.text, confidence: w.confidence, bbox: w.bbox });
+        }
+      }
+    }
+  }
+  return words;
+});
+
 ipcMain.handle('print:list', async () => {
   try { return await mainWindow.webContents.getPrintersAsync(); } catch { return []; }
 });

@@ -123,6 +123,10 @@ const checks = [
   ['mixed orientation: auto sheet + rotation',
     r.print?.mixed?.orientations?.[0] === true && r.print?.mixed?.orientations?.[1] === false
     && r.print?.mixed?.sheetLandscape === false && r.print?.mixed?.page1Rotated === true],
+  ['OCR: scan page starts with no text', r.ocr?.preTextItems === 0],
+  ['OCR: Turkish + English text recognized',
+    r.ocr?.turkishFound === true && r.ocr?.englishFound === true && r.ocr?.yearFound === true],
+  ['OCR: recognized text is searchable', r.ocr?.searchMatches >= 1],
 ];
 
 console.log('');

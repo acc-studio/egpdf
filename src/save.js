@@ -9,7 +9,7 @@ import { pdfjsLib } from './viewer.js';
 // edits keep their chosen face and non-ASCII text (ğ, ş, İ, …) survives.
 // The path is resolved in the main process (host filesystem) and bridged in;
 // falls back to Helvetica if a face is missing.
-function makeFontLoader(doc) {
+export function makeFontLoader(doc) {
   const cache = new Map();
   let fontkitRegistered = false;
   return async (family) => {

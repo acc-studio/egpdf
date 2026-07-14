@@ -8,6 +8,7 @@ import {
 import { openPrintPreview, isPrintPreviewOpen } from './print.js';
 import { detectAvailableFonts } from './fonts.js';
 import { buildSavedPdf, reorderPages, rotatePage, rotateAllPages, deletePage } from './save.js';
+import { ocrRun, scannedPages, pageHasText } from './ocr.js';
 import { Search } from './search.js';
 import { compareDocs } from './compare.js';
 import { Organizer } from './organizer.js';
@@ -343,6 +344,33 @@ async function structuralOp(tab, opRunner) {
   }
 }
 
+// OCR the given pages (or, with no argument, every page lacking a text
+// layer). Runs as a structural op, so Ctrl+Z undoes it until the next save.
+async function runOcr(pageNums = null) {
+  if (!active || saving) return;
+  const tab = active;
+  let pages = pageNums;
+  if (!pages) {
+    setStatus('Looking for scanned pages…');
+    pages = await scannedPages(tab.pdf);
+    if (!pages.length) {
+      setStatus('No scanned pages found — every page already has a text layer');
+      return;
+    }
+  } else {
+    for (const n of pages) {
+      if (await pageHasText(tab.pdf, n)
+        && !confirm(`Page ${n} already contains text. Run OCR on it anyway?`)) return;
+    }
+  }
+  const stats = {};
+  await structuralOp(tab, (b) =>
+    ocrRun(b, pages, (i, total) => setStatus(`OCR — page ${i}/${total}…`), stats));
+  if (stats.words != null) {
+    setStatus(`OCR done — ${stats.words} words recognized on ${pages.length} page${pages.length > 1 ? 's' : ''}`);
+  }
+}
+
 async function structuralUndo(tab) {
   if (!tab || !tab.history.length) return false;
   const h = tab.history.pop();
@@ -360,6 +388,7 @@ const organizer = new Organizer({
   el: $('sidebar'),
   onSelect: (n) => active?.view.scrollToPage(n),
   onRotate: (n) => structuralOp(active, (b) => rotatePage(b, n - 1)),
+  onOcr: (n) => runOcr([n]),
   onDelete: (n) => {
     if (!active) return;
     if (confirm(`Delete page ${n}? (Ctrl+Z restores it until you save)`)) {
@@ -573,7 +602,7 @@ async function startImageTool() {
 // ---------------------------------------------------------------- wiring
 
 applyIcons({
-  'btn-sidebar': 'sidebar', 'btn-rotate-doc': 'rotate',
+  'btn-sidebar': 'sidebar', 'btn-rotate-doc': 'rotate', 'btn-ocr': 'ocr',
   'btn-open': 'open', 'btn-save': 'save', 'btn-saveas': 'saveas', 'btn-print': 'print',
   'btn-zoom-out': 'zoomout', 'btn-zoom-in': 'zoomin', 'btn-fit': 'fit',
   'btn-split': 'split', 'btn-compare': 'compare',
@@ -599,6 +628,7 @@ $('btn-fit').addEventListener('click', () => {
 });
 $('btn-sidebar').addEventListener('click', toggleSidebar);
 $('btn-rotate-doc').addEventListener('click', () => structuralOp(active, (b) => rotateAllPages(b)));
+$('btn-ocr').addEventListener('click', () => runOcr());
 $('btn-split').addEventListener('click', toggleSplit);
 $('btn-compare').addEventListener('click', runCompare);
 $('compare-close').addEventListener('click', closeComparePanel);
@@ -759,5 +789,6 @@ import('./autotest.js').then((m) =>
       rotate: (n) => structuralOp(active, (b) => rotatePage(b, n - 1)),
       reorder: (from, to) => structuralOp(active, (b) => reorderPages(b, from, to)),
       del: (n) => structuralOp(active, (b) => deletePage(b, n - 1)),
+      ocr: (pages) => runOcr(pages),
     },
   }));

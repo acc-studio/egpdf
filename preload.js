@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('native', {
   existsMany: (paths) => ipcRenderer.invoke('fs:exists-many', paths),
   fontFamilies: () => ipcRenderer.invoke('font:families'),
   fontPath: (name) => ipcRenderer.invoke('font:path', name),
+  ocrRecognize: (png) => ipcRenderer.invoke('ocr:recognize', png),
   listPrinters: () => ipcRenderer.invoke('print:list'),
   printNow: (opts) => ipcRenderer.invoke('print:go', opts),
   getTestConfig: () => ipcRenderer.invoke('test:config'),
