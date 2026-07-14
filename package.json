@@ -9,7 +9,7 @@
     "start": "npm run build && electron .",
     "test": "node test/run.mjs",
     "test:packaged": "node test/run.mjs --packaged",
-    "dist": "npm run build && electron-builder --mac --win --linux --publish never"
+    "dist": "npm run build && electron-builder --publish never"
   },
   "author": "Aziz Can Cengiz",
   "license": "MIT",

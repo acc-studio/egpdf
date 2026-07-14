@@ -8,7 +8,7 @@
 // test-results.json + screenshots into test/.out/<mode>/; this script launches
 // it, then asserts on the results. Exit code 0 = all green.
 import { spawnSync, spawn } from 'child_process';
-import { mkdirSync, rmSync, readFileSync, existsSync } from 'fs';
+import { mkdirSync, rmSync, readFileSync, readdirSync, existsSync } from 'fs';
 import { createRequire } from 'module';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -36,13 +36,31 @@ mkdirSync(outDir, { recursive: true });
 console.log(`\n=== egPDF e2e suite (${mode}) ===\n`);
 run('node', ['build.mjs']);
 
+// Locate the unpacked app binary electron-builder --dir produces. The output
+// folder name carries an arch suffix on non-default architectures (e.g.
+// mac-arm64, win-arm64-unpacked), so scan rather than hardcode it.
+function findPackagedExe() {
+  const releaseDir = path.join(rootDir, 'release');
+  const entries = existsSync(releaseDir) ? readdirSync(releaseDir) : [];
+  if (process.platform === 'win32') {
+    const dir = entries.find((d) => /^win(-\w+)?-unpacked$/.test(d));
+    return dir ? path.join(releaseDir, dir, 'egPDF.exe') : null;
+  }
+  if (process.platform === 'darwin') {
+    const dir = entries.find((d) => /^mac(-\w+)?$/.test(d));
+    return dir ? path.join(releaseDir, dir, 'egPDF.app', 'Contents', 'MacOS', 'egPDF') : null;
+  }
+  const dir = entries.find((d) => /^linux(-\w+)?-unpacked$/.test(d));
+  return dir ? path.join(releaseDir, dir, 'egpdf') : null;
+}
+
 let exe, exeArgs;
 if (packaged) {
-  run('npx', ['electron-builder', '--win', '--dir']);
-  exe = path.join(rootDir, 'release', 'win-unpacked', 'egPDF.exe');
+  run('npx', ['electron-builder', '--dir']);
+  exe = findPackagedExe();
   exeArgs = [];
-  if (!existsSync(exe)) {
-    console.error('packaged exe not found: ' + exe);
+  if (!exe || !existsSync(exe)) {
+    console.error('packaged exe not found: ' + (exe || '(no matching release/ dir)'));
     process.exit(1);
   }
 } else {
@@ -56,6 +74,9 @@ run('node', [path.join('test', 'make-sample.mjs'), samplePath]);
 console.log('\nlaunching app…');
 const args = [...exeArgs, samplePath, `--autotest=${outDir}`];
 if (process.env.CI) args.push('--disable-gpu');
+// GitHub-hosted Linux runners don't have chrome-sandbox installed setuid-root,
+// which makes Chromium abort on launch; --no-sandbox is safe for a CI test run.
+if (process.env.CI && process.platform === 'linux') args.push('--no-sandbox');
 const child = spawn(exe, args, { cwd: rootDir, stdio: 'inherit' });
 
 const exited = await new Promise((resolve) => {
