@@ -7,7 +7,7 @@ import {
 } from './edits.js';
 import { openPrintPreview, isPrintPreviewOpen } from './print.js';
 import { detectAvailableFonts } from './fonts.js';
-import { buildSavedPdf, reorderPages, rotatePage, deletePage } from './save.js';
+import { buildSavedPdf, reorderPages, rotatePage, rotateAllPages, deletePage } from './save.js';
 import { Search } from './search.js';
 import { compareDocs } from './compare.js';
 import { Organizer } from './organizer.js';
@@ -573,7 +573,7 @@ async function startImageTool() {
 // ---------------------------------------------------------------- wiring
 
 applyIcons({
-  'btn-sidebar': 'sidebar',
+  'btn-sidebar': 'sidebar', 'btn-rotate-doc': 'rotate',
   'btn-open': 'open', 'btn-save': 'save', 'btn-saveas': 'saveas', 'btn-print': 'print',
   'btn-zoom-out': 'zoomout', 'btn-zoom-in': 'zoomin', 'btn-fit': 'fit',
   'btn-split': 'split', 'btn-compare': 'compare',
@@ -598,6 +598,7 @@ $('btn-fit').addEventListener('click', () => {
   updateZoomLabel();
 });
 $('btn-sidebar').addEventListener('click', toggleSidebar);
+$('btn-rotate-doc').addEventListener('click', () => structuralOp(active, (b) => rotateAllPages(b)));
 $('btn-split').addEventListener('click', toggleSplit);
 $('btn-compare').addEventListener('click', runCompare);
 $('compare-close').addEventListener('click', closeComparePanel);

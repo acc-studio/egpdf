@@ -166,6 +166,16 @@ export async function rotatePage(bytes, index) {
   return { bytes: out, map: (p) => p };
 }
 
+export async function rotateAllPages(bytes) {
+  const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
+  for (const page of doc.getPages()) {
+    const cur = page.getRotation().angle || 0;
+    page.setRotation(degrees(((cur + 90) % 360 + 360) % 360));
+  }
+  const out = await doc.save({ updateFieldAppearances: false });
+  return { bytes: out, map: (p) => p };
+}
+
 export async function deletePage(bytes, index) {
   const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
   if (doc.getPageCount() <= 1) throw new Error('Cannot delete the only page');

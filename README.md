@@ -37,7 +37,7 @@ All versions are on the [releases page](https://github.com/acc-studio/egpdf/rele
 - **Clean viewer** — continuous scroll, fit-width, zoom (`Ctrl`+wheel / `Ctrl+=` / `Ctrl+-` / `Ctrl+0`), text selection, search (`Ctrl+F`).
 - **Split view** — the split button shows two documents side by side; click a pane to focus it, then pick a tab for it.
 - **Compare** — with two documents in split view, the compare button diffs their text word-by-word; click a difference to jump both panes to it.
-- **Pages panel** — the sidebar button shows page thumbnails: drag to reorder, hover a page to rotate 90° or delete it. `Ctrl+Z` undoes page changes.
+- **Pages panel** — the sidebar button shows page thumbnails: drag to reorder, hover a page to rotate 90° or delete it. The toolbar's rotate button rotates every page in the document 90° at once. `Ctrl+Z` undoes page changes.
 - **Text selection** — select text with the mouse to copy it, or use the popup that appears: **Highlight**, **Edit text** (whites out the selection and opens a pre-filled, size-matched text box to retype), or **Redact**.
 - **Print (Ctrl+P)** — opens an M365-style print screen: settings panel (printer, copies, page range, one/two-sided, collation, orientation, paper size, color, fit/actual size) beside a live page preview with navigation and zoom. Prints the document exactly as saving would produce it: form values, highlights, comments, added text/images, and true redactions all included (pages rendered at 150 dpi through the save pipeline).
 
