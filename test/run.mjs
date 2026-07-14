@@ -147,6 +147,7 @@ const checks = [
   ['OCR spellfix: valid words untouched',
     r.ocrSpell?.validKept === 'document' && r.ocrSpell?.turkishSolid === 'mahkeme'],
   ['OCR selection geometry: words do not overlap', (r.ocr?.maxOverlap ?? 1) < 0.15],
+  ['OCR text layer: whole lines are single text items', r.ocr?.lineItems >= 2],
   ['zoom: typed percentage applies', r.zoom?.typedScale === 1.5 && r.zoom?.label === '150%'],
   ['zoom: preference persisted', r.zoom?.pref?.scale === 1.5],
   ['zoom: remembered for later documents', r.zoom?.newTabScale === 1.5 && r.zoom?.newTabFit === false],

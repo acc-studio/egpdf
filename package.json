@@ -1,7 +1,7 @@
 {
   "name": "egpdf",
   "productName": "egPDF",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Minimal local PDF reader and editor",
   "main": "main.js",
   "scripts": {

@@ -42,27 +42,37 @@ async function renderPageImage(pdf, n) {
   return { png: new Uint8Array(await blob.arrayBuffer()), viewport };
 }
 
-// Map a word's pixel bbox to a PDF-space placement. Both baseline endpoints
-// go through the viewport transform, so page /Rotate is handled generically:
-// the invisible text runs along whatever direction the viewer displays as
-// horizontal, keeping selection and search-highlight boxes aligned.
+// Map a pixel span (a word's bbox, or a whole line's) to a PDF-space
+// placement. Both baseline endpoints go through the viewport transform, so
+// page /Rotate is handled generically: the invisible text runs along whatever
+// direction the viewer displays as horizontal.
 //
-// The font size comes from the line height (uniform across the line, so
-// selection boxes don't jump word to word) and the y position from the line's
-// actual baseline, interpolated at the word's x — Tesseract reports baselines
-// as a segment across the line, which also follows slightly skewed scans.
-function placeWord(viewport, w) {
-  const { x0, y0, x1, y1 } = w.bbox;
-  const bl = w.baseline;
+// The font size comes from the line height and the y position from the
+// line's actual baseline, interpolated at the span's x — Tesseract reports
+// baselines as a segment across the line, which also follows skewed scans.
+function placeSpan(viewport, x0, x1, top, bot, baseline, lineH) {
+  const bl = baseline;
   const baseYAt = (bl && bl.x1 > bl.x0)
     ? (x) => bl.y0 + ((bl.y1 - bl.y0) * (x - bl.x0)) / (bl.x1 - bl.x0)
-    : () => y1 - 0.15 * (y1 - y0);
+    : () => bot - 0.15 * (bot - top);
   const [sx, sy] = viewport.convertToPdfPoint(x0, baseYAt(x0));
   const [ex, ey] = viewport.convertToPdfPoint(x1, baseYAt(x1));
   const angle = (Math.atan2(ey - sy, ex - sx) * 180) / Math.PI;
-  const size = ((w.lineH || y1 - y0) / viewport.scale) * 0.9;
-  const width = Math.hypot(ex - sx, ey - sy); // word width in PDF points
+  const size = ((lineH || bot - top) / viewport.scale) * 0.9;
+  const width = Math.hypot(ex - sx, ey - sy); // span width in PDF points
   return { x: sx, y: sy, angle, size, width };
+}
+
+function placeWord(viewport, w) {
+  return placeSpan(viewport, w.bbox.x0, w.bbox.x1, w.bbox.y0, w.bbox.y1, w.baseline, w.lineH);
+}
+
+function placeLine(viewport, arr) {
+  const first = arr[0];
+  const last = arr[arr.length - 1];
+  const top = Math.min(...arr.map((w) => w.bbox.y0));
+  const bot = Math.max(...arr.map((w) => w.bbox.y1));
+  return placeSpan(viewport, first.bbox.x0, last.bbox.x1, top, bot, first.baseline, first.lineH);
 }
 
 const setHScale = (percent) =>
@@ -118,26 +128,55 @@ export async function ocrRun(bytes, pageNums, onProgress, stats = {}) {
   for (const { n, viewport, words } of recognized) {
     const page = doc.getPage(n - 1);
     let drew = false;
+
+    // One drawText per recognized LINE, words joined with real spaces. Drawn
+    // word-by-word, every word is its own text item with its own rotation and
+    // scaling — pdf.js can't reassemble that into lines, and copied text
+    // comes out with a break (or nothing) between every word. Per-line runs
+    // extract exactly like a digitally-created PDF. The Tz width-match keeps
+    // the line's start and end pinned to the printed line.
+    const lines = [];
+    let cur = null;
+    let curKey = null;
     for (const w of words) {
       if (w.confidence < MIN_CONFIDENCE) continue;
-      const { x, y, angle, size, width } = placeWord(viewport, w);
-      try {
-        // pickWordText prefers a dictionary-backed engine alternative;
-        // cleanOcrWord fixes merged words, ligatures, and glyph confusions;
-        // the corrected text is drawn at the original bbox.
-        const text = cleanOcrWord(pickWordText(w));
-        const font = await pickFont(text);
-        if (!font) continue; // no available font covers these glyphs
-        // Horizontally scale the word (Tz) so its text-metric width equals
-        // the printed word's width — selection and search-highlight boxes
-        // then end exactly where the visible word ends.
-        const natural = font.widthOfTextAtSize(text, size);
-        const tz = natural > 0 ? Math.max(30, Math.min(300, (width / natural) * 100)) : 100;
-        page.pushOperators(setHScale(tz));
-        page.drawText(text, { x, y, size, font, opacity: 0, rotate: degrees(angle) });
-        drew = true;
-        total++;
-      } catch { /* glyphs the fallback font can't encode — skip the word */ }
+      const key = `${w.para}:${w.line}`;
+      if (key !== curKey) { cur = []; lines.push(cur); curKey = key; }
+      cur.push(w);
+    }
+    for (const arr of lines) {
+      // pickWordText prefers a dictionary-backed engine alternative;
+      // cleanOcrWord fixes merged words, ligatures, and glyph confusions.
+      const lineText = arr.map((w) => cleanOcrWord(pickWordText(w))).join(' ');
+      const lineFont = await pickFont(lineText);
+      if (lineFont) {
+        try {
+          const { x, y, angle, size, width } = placeLine(viewport, arr);
+          const natural = lineFont.widthOfTextAtSize(lineText, size);
+          const tz = natural > 0 ? Math.max(30, Math.min(300, (width / natural) * 100)) : 100;
+          page.pushOperators(setHScale(tz));
+          page.drawText(lineText, { x, y, size, font: lineFont, opacity: 0, rotate: degrees(angle) });
+          drew = true;
+          total += arr.length;
+          continue;
+        } catch { /* fall through to word-by-word */ }
+      }
+      // Fallback for lines no single font can cover (mixed scripts): draw
+      // per word so at least the coverable words become searchable.
+      for (const w of arr) {
+        try {
+          const text = cleanOcrWord(pickWordText(w));
+          const font = await pickFont(text);
+          if (!font) continue; // no available font covers these glyphs
+          const { x, y, angle, size, width } = placeWord(viewport, w);
+          const natural = font.widthOfTextAtSize(text, size);
+          const tz = natural > 0 ? Math.max(30, Math.min(300, (width / natural) * 100)) : 100;
+          page.pushOperators(setHScale(tz));
+          page.drawText(text, { x, y, size, font, opacity: 0, rotate: degrees(angle) });
+          drew = true;
+          total++;
+        } catch { /* glyphs the fallback font can't encode — skip the word */ }
+      }
     }
     if (drew) page.pushOperators(setHScale(100)); // don't leak Tz to later content
   }

@@ -357,6 +357,9 @@ export async function maybeRunAutotest(ctx) {
         }
       }
       results.ocr.maxOverlap = maxOverlap;
+      // line-based text layer: whole lines must come out as single items,
+      // otherwise copied text gets a break between every word
+      results.ocr.lineItems = tc.items.filter((i) => i.str.trim().split(/\s+/).length >= 2).length;
     }
     await window.native.testCapture(out('t10-ocr.png'));
 
