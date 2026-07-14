@@ -15,6 +15,25 @@ export async function loadPdf(bytes) {
   return await task.promise;
 }
 
+// Zoom preference, remembered across launches (localStorage works in both
+// the Electron renderer and the web build). Either {fit: true} or {scale}.
+const ZOOM_PREF_KEY = 'egpdf.zoom';
+
+export function savedZoomPref() {
+  try {
+    const p = JSON.parse(localStorage.getItem(ZOOM_PREF_KEY));
+    if (p && p.fit === true) return { fit: true };
+    if (p && typeof p.scale === 'number' && p.scale >= 0.2 && p.scale <= 6) return { scale: p.scale };
+  } catch { /* absent or malformed — fall through to default */ }
+  return null;
+}
+
+function saveZoomPref(fitMode, scale) {
+  try {
+    localStorage.setItem(ZOOM_PREF_KEY, JSON.stringify(fitMode ? { fit: true } : { scale }));
+  } catch { /* storage unavailable — zoom just won't persist */ }
+}
+
 // Minimal link service: enough for the annotation layer to render links and
 // interactive form widgets without pulling in the full pdf.js viewer.
 class MiniLinkService {
@@ -53,8 +72,15 @@ export class DocView {
     this.pdf = opts.tab.pdf;
     this.onCurrentPage = opts.onCurrentPage || (() => {});
     this.onPageRendered = opts.onPageRendered || (() => {});
-    this.scale = 1;
-    this.fitMode = true;
+    this.onZoom = opts.onZoom || (() => {});
+    const pref = savedZoomPref();
+    if (pref && !pref.fit) {
+      this.scale = pref.scale;
+      this.fitMode = false;
+    } else {
+      this.scale = 1;
+      this.fitMode = true;
+    }
     this.epoch = 0;
     this.holders = [];
     this.baseSizes = [];
@@ -173,6 +199,7 @@ export class DocView {
     dbg(`setZoom ${this.scale}->${scale} fit=${fitMode}`);
     if (Math.abs(scale - this.scale) < 0.001 && fitMode === this.fitMode) return;
     this.fitMode = fitMode;
+    saveZoomPref(fitMode, scale);
     const ratio = this.el.scrollHeight > 0 ? this.el.scrollTop / this.el.scrollHeight : 0;
     this.scale = scale;
     this.epoch++;
@@ -184,6 +211,7 @@ export class DocView {
     // IntersectionObserver re-fires for visible holders after resize, but not
     // when the window is occluded — render the visible range directly.
     setTimeout(() => this.renderVisible(), 0);
+    this.onZoom(scale);
   }
 
   refit() {

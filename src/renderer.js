@@ -51,6 +51,7 @@ function makeView(tab, rootEl) {
       }
     },
     onPageRendered: (n, holder) => { if (tab === active) search.onPageRendered(n, holder); },
+    onZoom: () => { if (tab === active) updateZoomLabel(); },
   });
 }
 
@@ -620,7 +621,16 @@ function setStatus(msg, isError = false) {
 }
 
 function updateZoomLabel() {
-  $('zoom-label').textContent = active ? Math.round(active.view.scale * 100) + '%' : '100%';
+  const el = $('zoom-input');
+  if (document.activeElement === el) return; // don't clobber a value being typed
+  el.value = active ? Math.round(active.view.scale * 100) + '%' : '100%';
+}
+
+function applyTypedZoom() {
+  const el = $('zoom-input');
+  const n = parseInt(el.value.replace('%', '').trim(), 10);
+  if (active && n >= 20 && n <= 600) active.view.setZoom(n / 100);
+  el.blur(); // blur refreshes the field to the actual applied zoom
 }
 
 function zoomBy(f) {
@@ -755,6 +765,14 @@ $('page-input').addEventListener('keydown', (e) => {
     e.target.blur();
   }
 });
+
+// zoom field: type a percentage, Enter applies, Esc/blur restores
+$('zoom-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') applyTypedZoom();
+  else if (e.key === 'Escape') { e.stopPropagation(); e.target.blur(); }
+});
+$('zoom-input').addEventListener('focus', (e) => e.target.select());
+$('zoom-input').addEventListener('blur', updateZoomLabel);
 
 // search bar
 $('search-input').addEventListener('keydown', (e) => {

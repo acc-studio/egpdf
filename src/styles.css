@@ -94,14 +94,17 @@ body { display: flex; flex-direction: column; }
 .icon-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .icon-btn.tool.active { background: var(--accent-soft); color: var(--accent); }
 
-#zoom-label { min-width: 44px; text-align: center; color: var(--text-dim); font-variant-numeric: tabular-nums; }
-#page-input {
+#page-input, #zoom-input {
   width: 38px; text-align: center;
   border: 1px solid transparent; border-radius: 5px;
   background: transparent; color: var(--text);
   padding: 3px 2px; font: inherit; font-variant-numeric: tabular-nums;
 }
-#page-input:hover, #page-input:focus { border-color: var(--border); background: var(--surface); outline: none; }
+#zoom-input { width: 52px; color: var(--text-dim); }
+#zoom-input:focus { color: var(--text); }
+#page-input:hover, #page-input:focus, #zoom-input:hover, #zoom-input:focus {
+  border-color: var(--border); background: var(--surface); outline: none;
+}
 .dim { color: var(--text-dim); }
 .small { font-size: 11px; }
 

@@ -38,7 +38,7 @@ The full suite also runs in the browser at **https://egpdf.vercel.app** — same
 ## Viewing
 
 - **Tabs** — open many PDFs (drag & drop anywhere, `Ctrl+O`, middle-click a tab to close, `Ctrl+Tab` to switch).
-- **Clean viewer** — continuous scroll, fit-width, zoom (`Ctrl`+wheel / `Ctrl+=` / `Ctrl+-` / `Ctrl+0`), text selection, search (`Ctrl+F`).
+- **Clean viewer** — continuous scroll, fit-width, zoom (`Ctrl`+wheel / `Ctrl+=` / `Ctrl+-` / `Ctrl+0`, or type an exact percentage into the toolbar's zoom field), text selection, search (`Ctrl+F`). Your zoom level is remembered for the next launch.
 - **Split view** — the split button shows two documents side by side; click a pane to focus it, then pick a tab for it.
 - **Compare** — with two documents in split view, the compare button diffs their text word-by-word; click a difference to jump both panes to it.
 - **Pages panel** — the sidebar button shows page thumbnails: drag to reorder, hover a page to rotate 90°, OCR it, or delete it. The toolbar's rotate button rotates every page in the document 90° at once. `Ctrl+Z` undoes page changes.

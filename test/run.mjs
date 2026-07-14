@@ -142,6 +142,9 @@ const checks = [
     r.ocrSpell?.available === false || r.ocrSpell?.fixed === 'requested'],
   ['OCR spellfix: valid words untouched', r.ocrSpell?.validKept === 'document'],
   ['OCR selection geometry: words do not overlap', (r.ocr?.maxOverlap ?? 1) < 0.15],
+  ['zoom: typed percentage applies', r.zoom?.typedScale === 1.5 && r.zoom?.label === '150%'],
+  ['zoom: preference persisted', r.zoom?.pref?.scale === 1.5],
+  ['zoom: remembered for later documents', r.zoom?.newTabScale === 1.5 && r.zoom?.newTabFit === false],
 ];
 
 console.log('');

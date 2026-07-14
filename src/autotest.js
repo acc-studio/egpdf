@@ -49,8 +49,13 @@ export async function maybeRunAutotest(ctx) {
   window.addEventListener('error', (e) => logs.push('window.onerror: ' + (e.error?.stack || e.message)));
   window.addEventListener('unhandledrejection', (e) => logs.push('unhandledrejection: ' + (e.reason?.stack || e.reason)));
   try {
+    // A zoom preference left over from a dev session must not skew the run —
+    // clear it and put the first tab (created before this code ran) into the
+    // default fit mode.
+    localStorage.removeItem('egpdf.zoom');
     await waitFor(() => ctx.getActive(), 'first tab');
     const tab = ctx.getActive();
+    if (!tab.view.fitMode) tab.view.setZoom(tab.view.computeFitScale(), true);
     await waitFor(() => tab.view.holders[0]?._rendered, 'tab1 p1');
 
     // 1) programmatic edits (same model the tools produce)
@@ -392,6 +397,24 @@ export async function maybeRunAutotest(ctx) {
       confusion: isConfusionVariant('reguested', 'requested'),
       notConfusion: isConfusionVariant('reguested', 'regulated'),
     };
+
+    // 11) zoom: typed percentage applies, and the preference carries into
+    // views opened afterwards (what a relaunch would read back).
+    const zi = document.getElementById('zoom-input');
+    zi.focus();
+    zi.value = '150';
+    zi.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await sleep(400);
+    results.zoom = {
+      typedScale: ctx.getActive().view.scale,
+      label: zi.value,
+      pref: JSON.parse(localStorage.getItem('egpdf.zoom') || 'null'),
+    };
+    await ctx.openPaths([out('saved.pdf')]);
+    const zTab = ctx.getActive();
+    results.zoom.newTabScale = zTab.view.scale;
+    results.zoom.newTabFit = zTab.view.fitMode;
+    zTab.view.setZoom(zTab.view.computeFitScale(), true); // restore the default
 
     results.ok = true;
   } catch (e) {
