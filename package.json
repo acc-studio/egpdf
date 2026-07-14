@@ -38,7 +38,7 @@
       "category": "public.app-category.productivity"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": ["AppImage"],
       "category": "Office",
       "icon": "build/icon.png"
     },

@@ -68,6 +68,6 @@ npm run dist
 ```
 
 Builds a native package for the current platform (DMG on macOS, NSIS installer
-on Windows, AppImage + deb on Linux). After installing on Windows, right-click
+on Windows, AppImage on Linux). After installing on Windows, right-click
 any PDF → **Open with → Choose another app → egPDF → Always** to make it the
 default PDF app.
