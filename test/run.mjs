@@ -155,6 +155,7 @@ const checks = [
   ['combine: edits before the insertion point keep their page', r.combine?.mapBefore === 1],
   ['combine: overlay shows a column per open document, closes cleanly',
     r.combine?.columns >= 2 && r.combine?.closed === true],
+  ['combine: header click renders a preview', r.combine?.previewCanvases >= 1],
   ['combine: drop copies a page in, leaves the source untouched',
     r.combine?.insert?.grew === true && r.combine?.insert?.sourceUntouched === true],
   ['combine: Ctrl+Z undoes a combine', r.combine?.undoRestored === true],

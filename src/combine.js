@@ -17,8 +17,12 @@ export class Combine {
     this.opts = opts;
     this.el = opts.el;
     this.colsEl = opts.colsEl;
-    this.caches = new WeakMap(); // pdf → Map(pageNum → canvas)
+    this.previewEl = opts.previewEl;
+    this.caches = new WeakMap();        // pdf → Map(pageNum → canvas) — thumbnails
+    this.previewCaches = new WeakMap(); // pdf → Map(pageNum → canvas) — larger preview
     this.observer = null;
+    this.previewObserver = null;
+    this.previewTabId = null;    // which document is shown in the preview pane
     this.sel = null;             // { tabId, pages:Set<number> } — selection in one column
     this.drag = null;            // { tabId, pages:number[] }
     this.gen = 0;
@@ -40,9 +44,13 @@ export class Combine {
     this.gen++;
     this.observer?.disconnect();
     this.observer = null;
+    this.previewObserver?.disconnect();
+    this.previewObserver = null;
     this.colsEl.replaceChildren();
+    this.previewEl.replaceChildren();
     this.sel = null;
     this.drag = null;
+    this.previewTabId = null;
     this.opts.onClose?.();
   }
 
@@ -57,7 +65,26 @@ export class Combine {
     }, { root: this.colsEl, rootMargin: '400px 0px' });
 
     this.colsEl.replaceChildren();
-    for (const tab of this.opts.getTabs()) this.colsEl.appendChild(this.buildColumn(tab, gen));
+    const tabs = this.opts.getTabs();
+    for (const tab of tabs) this.colsEl.appendChild(this.buildColumn(tab, gen));
+
+    // keep the preview in sync: re-render the previewed doc (its pdf may have
+    // been reloaded by an insert), or drop the preview if that tab is gone
+    if (this.previewTabId != null && tabs.some((t) => t.id === this.previewTabId)) {
+      this.previewTab(tabs.find((t) => t.id === this.previewTabId));
+    } else {
+      this.previewTabId = null;
+      this.previewObserver?.disconnect();
+      this.previewEl.replaceChildren(this.hintEl());
+    }
+  }
+
+  hintEl() {
+    const hint = document.createElement('div');
+    hint.id = 'combine-preview-hint';
+    hint.className = 'dim';
+    hint.textContent = 'Click a document’s title to preview it here.';
+    return hint;
   }
 
   buildColumn(tab, gen) {
@@ -66,13 +93,14 @@ export class Combine {
     col.dataset.tabId = tab.id;
 
     const head = document.createElement('div');
-    head.className = 'combine-col-head';
+    head.className = 'combine-col-head' + (this.previewTabId === tab.id ? ' previewing' : '');
     head.textContent = tab.title;
-    head.title = tab.filePath || tab.title;
+    head.title = `${tab.filePath || tab.title}\nClick to preview`;
     const count = document.createElement('span');
     count.className = 'combine-col-count dim';
     count.textContent = `${tab.pdf.numPages} page${tab.pdf.numPages === 1 ? '' : 's'}`;
     head.appendChild(count);
+    head.addEventListener('click', () => this.previewTab(tab));
 
     const body = document.createElement('div');
     body.className = 'combine-col-body';
@@ -250,5 +278,82 @@ export class Combine {
       thumb._rendered = true;
     } catch { /* thumbnail is cosmetic */ }
     finally { thumb._rendering = false; }
+  }
+
+  // ---- preview pane ---------------------------------------------------------
+  // Clicking a column header shows that document's pages (larger) on the right.
+
+  previewTab(tab) {
+    if (!tab) return;
+    this.previewTabId = tab.id;
+    for (const h of this.colsEl.querySelectorAll('.combine-col-head')) {
+      h.classList.toggle('previewing', h.parentElement?.dataset.tabId === String(tab.id));
+    }
+    this.renderPreview(tab);
+  }
+
+  renderPreview(tab) {
+    this.previewObserver?.disconnect();
+    this.previewEl.replaceChildren();
+    const title = document.createElement('div');
+    title.id = 'combine-preview-title';
+    title.textContent = tab.title;
+    this.previewEl.appendChild(title);
+
+    this.previewObserver = new IntersectionObserver((entries) => {
+      for (const en of entries) if (en.isIntersecting) this.renderPreviewPage(en.target);
+    }, { root: this.previewEl, rootMargin: '600px 0px' });
+
+    for (let n = 1; n <= tab.pdf.numPages; n++) {
+      const wrap = document.createElement('div');
+      wrap.className = 'cp-page-wrap';
+      wrap.dataset.tabId = tab.id;
+      wrap.dataset.page = n;
+      wrap.innerHTML = `<div class="cp-page"></div><div class="cp-page-num">${n}</div>`;
+      this.previewEl.appendChild(wrap);
+      this.previewObserver.observe(wrap);
+    }
+    // render the first page right away so the pane is never blank
+    const first = this.previewEl.querySelector('.cp-page-wrap');
+    if (first) this.renderPreviewPage(first);
+  }
+
+  previewCacheFor(pdf) {
+    let c = this.previewCaches.get(pdf);
+    if (!c) { c = new Map(); this.previewCaches.set(pdf, c); }
+    return c;
+  }
+
+  async renderPreviewPage(wrap) {
+    if (wrap._rendered || wrap._rendering) return;
+    wrap._rendering = true;
+    const gen = this.gen;
+    try {
+      const tab = this.opts.getTabs().find((t) => t.id === +wrap.dataset.tabId);
+      if (!tab) return;
+      const n = +wrap.dataset.page;
+      const cache = this.previewCacheFor(tab.pdf);
+      let canvas = cache.get(n);
+      if (!canvas) {
+        const page = await tab.pdf.getPage(n);
+        const targetW = Math.max(240, Math.min(620, this.previewEl.clientWidth - 48));
+        const scale = targetW / page.getViewport({ scale: 1 }).width;
+        const viewport = page.getViewport({ scale });
+        canvas = document.createElement('canvas');
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = Math.floor(viewport.width * dpr);
+        canvas.height = Math.floor(viewport.height * dpr);
+        await page.render({
+          canvasContext: canvas.getContext('2d', { alpha: false }),
+          viewport,
+          transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null,
+        }).promise;
+        cache.set(n, canvas);
+      }
+      if (this.gen !== gen) return; // overlay re-rendered while we waited
+      wrap.querySelector('.cp-page').replaceChildren(canvas);
+      wrap._rendered = true;
+    } catch { /* preview is cosmetic */ }
+    finally { wrap._rendering = false; }
   }
 }

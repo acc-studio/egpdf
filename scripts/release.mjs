@@ -61,8 +61,14 @@ run('npm', ['run', 'dist']);
 
 // 4) stage under the version-independent name the README links depend on
 const releaseDir = path.join(root, 'release');
-const built = readdirSync(releaseDir).find((f) => PLATFORM.glob.test(f));
-if (!built) { console.error(`no artifact matching ${PLATFORM.glob} in release/`); process.exit(1); }
+// The release/ dir accumulates artifacts from earlier version builds, so match
+// on the extension AND the current version — never just "first file that fits".
+const candidates = readdirSync(releaseDir).filter((f) => PLATFORM.glob.test(f));
+const built = candidates.find((f) => f.includes(pkg.version));
+if (!built) {
+  console.error(`no ${tag} artifact in release/ (matched extension: ${candidates.join(', ') || 'none'})`);
+  process.exit(1);
+}
 const stagedPath = path.join(releaseDir, PLATFORM.staged);
 copyFileSync(path.join(releaseDir, built), stagedPath);
 console.log(`\nstaged ${built} → ${PLATFORM.staged}`);

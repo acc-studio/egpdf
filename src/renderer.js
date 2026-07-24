@@ -554,6 +554,7 @@ async function combineInsert(targetTab, sourceTab, pages, atIndex) {
 const combine = new Combine({
   el: $('combine-overlay'),
   colsEl: $('combine-cols'),
+  previewEl: $('combine-preview'),
   getTabs: () => tabs,
   onInsert: combineInsert,
 });
@@ -705,7 +706,7 @@ applyIcons({
   'btn-sidebar': 'sidebar', 'btn-rotate-doc': 'rotate', 'btn-ocr': 'ocr',
   'btn-open': 'open', 'btn-save': 'save', 'btn-saveas': 'saveas', 'btn-print': 'print',
   'btn-zoom-out': 'zoomout', 'btn-zoom-in': 'zoomin', 'btn-fit': 'fit',
-  'btn-split': 'split', 'btn-compare': 'compare',
+  'btn-split': 'split', 'btn-compare': 'compare', 'btn-combine': 'combine',
   'tool-select': 'select', 'tool-redact': 'redact', 'tool-whiteout': 'whiteout',
   'tool-highlight': 'highlight', 'tool-text': 'text', 'tool-image': 'image',
   'tool-note': 'note', 'tool-ocrarea': 'ocrarea',
@@ -918,6 +919,8 @@ import('./autotest.js').then((m) =>
       open: () => openCombine(),
       close: () => combine.close(),
       columns: () => combine.columnCount(),
+      preview: (i = 0) => combine.previewTab(tabs[i]),
+      previewRendered: () => document.querySelectorAll('#combine-preview .cp-page canvas').length,
       // Drive the real drop path: copy `pages` from another open tab into the
       // active one at index `at`, returning page counts so the test can verify
       // the target grew and the source was left alone.

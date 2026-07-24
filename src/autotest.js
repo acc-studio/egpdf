@@ -449,10 +449,14 @@ export async function maybeRunAutotest(ctx) {
       const cdoc = await PDFDocument.load(combined.bytes);
       ctx.combine.open();
       await sleep(250);
+      // preview: clicking a document's header renders its pages on the right
+      ctx.combine.preview(0);
+      await sleep(500);
       results.combine = {
         pages: cdoc.getPageCount(),      // 1 target + 2 copied = 3
         mapBefore: combined.map(1),      // a page before the insertion point keeps its number
         columns: ctx.combine.columns(),  // one column per open document (several are open here)
+        previewCanvases: ctx.combine.previewRendered(), // ≥1 preview page drawn
       };
       await window.native.testCapture(out('t12-combine.png'));
       ctx.combine.close();
