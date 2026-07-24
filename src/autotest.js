@@ -2,7 +2,7 @@
 // Exercises: edit tools model, redaction rasterization, form filling,
 // the full save pipeline, and reopening the saved file.
 import { PDFDocument } from 'pdf-lib';
-import { buildSavedPdf } from './save.js';
+import { buildSavedPdf, insertPagesFrom } from './save.js';
 import { loadPdf, viewerDebug } from './viewer.js';
 import { addSelectionRects, editTextFromSelection, commitActiveTextEdits } from './edits.js';
 import { openPrintPreview, closePrintPreview, getPrintState } from './print.js';
@@ -434,6 +434,47 @@ export async function maybeRunAutotest(ctx) {
     results.zoom.newTabScale = zTab.view.scale;
     results.zoom.newTabFit = zTab.view.fitMode;
     zTab.view.setZoom(zTab.view.computeFitScale(), true); // restore the default
+
+    // 12) combine: the Combine overlay's underlying op copies pages across
+    // documents (source untouched), and the overlay renders one column per
+    // open document.
+    {
+      const src = await PDFDocument.create();
+      src.addPage([200, 200]); src.addPage([200, 200]);
+      const srcBytes = await src.save();
+      const tgt = await PDFDocument.create();
+      tgt.addPage([300, 300]);
+      const tgtBytes = await tgt.save();
+      const combined = await insertPagesFrom(tgtBytes, srcBytes, [0, 1], 1);
+      const cdoc = await PDFDocument.load(combined.bytes);
+      ctx.combine.open();
+      await sleep(250);
+      results.combine = {
+        pages: cdoc.getPageCount(),      // 1 target + 2 copied = 3
+        mapBefore: combined.map(1),      // a page before the insertion point keeps its number
+        columns: ctx.combine.columns(),  // one column per open document (several are open here)
+      };
+      await window.native.testCapture(out('t12-combine.png'));
+      ctx.combine.close();
+      results.combine.closed = ctx.combine.columns() === 0;
+
+      // real drop path: copy 1 page from another open document into the active
+      // one, through the same code a drag-drop runs (buildSavedPdf → structural
+      // op → reload). The target grows by one; the source is untouched; Ctrl+Z
+      // reverts it.
+      const ins = await ctx.combine.testInsert([1], 0);
+      await sleep(400);
+      results.combine.insert = ins && {
+        grew: ins.after === ins.before + 1,
+        sourceUntouched: ins.sourceAfter === ins.sourcePages,
+      };
+      const afterInsert = ctx.getActive().pdf.numPages;
+      // dispatch on document.body (has .closest, unlike window) so the global
+      // Ctrl+Z handler runs exactly as it would from a real keypress
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
+      await sleep(500);
+      results.combine.undoRestored = ctx.getActive().pdf.numPages === afterInsert - 1;
+    }
 
     results.ok = true;
   } catch (e) {

@@ -26,6 +26,19 @@ contextBridge.exposeInMainWorld('native', {
   },
   listPrinters: () => ipcRenderer.invoke('print:list'),
   printNow: (opts) => ipcRenderer.invoke('print:go', opts),
+  getVersion: () => ipcRenderer.invoke('app:version'),
+  openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
+  // Self-update. The only network access in the app: it talks to GitHub for a
+  // version number and (on request) the installer — never document data.
+  update: {
+    check: () => ipcRenderer.invoke('update:check'),
+    download: (info) => ipcRenderer.invoke('update:download', info),
+    install: (filePath) => ipcRenderer.invoke('update:install', filePath),
+    getAutoCheck: () => ipcRenderer.invoke('update:get-autocheck'),
+    setAutoCheck: (v) => ipcRenderer.invoke('update:set-autocheck', v),
+    onProgress: (cb) => ipcRenderer.on('update:progress', (_e, pct) => cb(pct)),
+    onAvailable: (cb) => ipcRenderer.on('update:available', (_e, info) => cb(info)),
+  },
   getTestConfig: () => ipcRenderer.invoke('test:config'),
   testCapture: (out) => ipcRenderer.invoke('test:capture', out),
   testQuit: () => ipcRenderer.invoke('test:quit'),

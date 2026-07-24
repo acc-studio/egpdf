@@ -1,7 +1,117 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
 const { homedir } = require('os');
+
+// ---- self-update ------------------------------------------------------------
+// The *only* network access in egPDF, and it touches nothing but GitHub: it
+// reads the latest release's version and, when the user asks, downloads the
+// installer. No document data is ever sent. Auto-check runs at startup unless
+// disabled in the About dialog.
+const UPDATE_REPO = 'acc-studio/egpdf';
+const UPDATE_UA = 'egPDF-updater';
+const UPDATE_ASSET = { win32: 'egPDF-Setup.exe', darwin: 'egPDF.dmg', linux: 'egPDF.AppImage' };
+
+function settingsPath() { return path.join(app.getPath('userData'), 'settings.json'); }
+function readSettings() {
+  try { return JSON.parse(fs.readFileSync(settingsPath(), 'utf8')); } catch { return {}; }
+}
+function writeSettings(patch) {
+  const merged = { ...readSettings(), ...patch };
+  try { fs.writeFileSync(settingsPath(), JSON.stringify(merged, null, 2)); } catch { /* non-fatal */ }
+  return merged;
+}
+function autoCheckEnabled() { return readSettings().autoUpdateCheck !== false; }
+
+// GET following GitHub's redirects, returning the whole body as a Buffer.
+function httpsGetBuffer(url, headers = {}) {
+  return new Promise((resolve, reject) => {
+    https.get(url, { headers: { 'User-Agent': UPDATE_UA, ...headers } }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        return resolve(httpsGetBuffer(res.headers.location, headers));
+      }
+      if (res.statusCode !== 200) { res.resume(); return reject(new Error(`HTTP ${res.statusCode}`)); }
+      const chunks = [];
+      res.on('data', (d) => chunks.push(d));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+    }).on('error', reject);
+  });
+}
+
+// Is `remote` a newer semver than `local`? (numeric major.minor.patch only)
+function isNewerVersion(remote, local) {
+  const parse = (v) => String(v).replace(/^v/, '').split('.').map((n) => parseInt(n, 10) || 0);
+  const a = parse(remote), b = parse(local);
+  for (let i = 0; i < 3; i++) {
+    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
+  }
+  return false;
+}
+
+async function checkForUpdate() {
+  const body = await httpsGetBuffer(
+    `https://api.github.com/repos/${UPDATE_REPO}/releases/latest`,
+    { Accept: 'application/vnd.github+json' });
+  const rel = JSON.parse(body.toString('utf8'));
+  const version = String(rel.tag_name || '').replace(/^v/, '');
+  const wantName = UPDATE_ASSET[process.platform];
+  const asset = (rel.assets || []).find((a) => a.name === wantName);
+  return {
+    available: !!version && isNewerVersion(version, app.getVersion()),
+    version,
+    htmlUrl: rel.html_url || null,
+    assetName: asset ? asset.name : null,
+    downloadUrl: asset ? asset.browser_download_url : null,
+  };
+}
+
+function downloadUpdate(info, onProgress) {
+  return new Promise((resolve, reject) => {
+    if (!info || !info.downloadUrl) {
+      return reject(new Error('no installer for this platform in the latest release'));
+    }
+    const dest = path.join(app.getPath('temp'), info.assetName || `egPDF-update-${info.version}`);
+    const get = (url) => {
+      https.get(url, { headers: { 'User-Agent': UPDATE_UA } }, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          res.resume();
+          return get(res.headers.location);
+        }
+        if (res.statusCode !== 200) { res.resume(); return reject(new Error(`HTTP ${res.statusCode}`)); }
+        const total = parseInt(res.headers['content-length'] || '0', 10);
+        let got = 0, lastPct = -1;
+        const file = fs.createWriteStream(dest);
+        res.on('data', (d) => {
+          got += d.length;
+          if (total) {
+            const pct = Math.floor((got / total) * 100);
+            if (pct !== lastPct) { lastPct = pct; try { onProgress(pct); } catch {} }
+          }
+        });
+        res.pipe(file);
+        file.on('finish', () => file.close(() => resolve(dest)));
+        file.on('error', reject);
+      }).on('error', reject);
+    };
+    get(info.downloadUrl);
+  });
+}
+
+// Hand the downloaded installer to the OS and quit so no files stay locked.
+// Windows NSIS (oneClick) reinstalls in place and relaunches egPDF; mac/linux
+// open the disk image / AppImage for the user to finish.
+function installUpdate(filePath) {
+  if (process.platform === 'win32') {
+    const { spawn } = require('child_process');
+    spawn(filePath, [], { detached: true, stdio: 'ignore' }).unref();
+  } else {
+    shell.openPath(filePath);
+  }
+  setTimeout(() => app.quit(), 500);
+  return true;
+}
 
 // System font directories per platform. We embed the matching TTF (subset) on
 // save so the PDF looks identical everywhere. Only plain .ttf files are usable
@@ -145,6 +255,18 @@ function createWindow() {
     const paths = pendingPaths.length ? pendingPaths : collectPdfArgs(process.argv.slice(1));
     if (paths.length) mainWindow.webContents.send('open-paths', paths);
     pendingPaths = [];
+
+    // Look for a newer release in the background (skipped during self-tests and
+    // when the user has turned auto-check off). Failures are silent — offline
+    // or an unreachable GitHub simply means no banner appears.
+    if (!TEST_MODE && autoCheckEnabled()) {
+      setTimeout(async () => {
+        try {
+          const info = await checkForUpdate();
+          if (info.available && mainWindow) mainWindow.webContents.send('update:available', info);
+        } catch { /* offline / GitHub unreachable */ }
+      }, 2500);
+    }
 
     // Hidden test hook: --autoshot=<out.png> [--open=<file.pdf>] renders and captures.
     const shotArg = process.argv.find((a) => a.startsWith('--autoshot='));
@@ -324,6 +446,18 @@ ipcMain.handle('ocr:recognize', async (_e, pngData, mode) => {
   }
   return words;
 });
+
+ipcMain.handle('app:version', () => app.getVersion());
+ipcMain.handle('shell:open-external', (_e, url) => {
+  if (/^https?:/i.test(url)) shell.openExternal(url);
+});
+
+ipcMain.handle('update:check', () => checkForUpdate());
+ipcMain.handle('update:get-autocheck', () => autoCheckEnabled());
+ipcMain.handle('update:set-autocheck', (_e, v) => { writeSettings({ autoUpdateCheck: !!v }); return true; });
+ipcMain.handle('update:download', (e, info) =>
+  downloadUpdate(info, (pct) => e.sender.send('update:progress', pct)));
+ipcMain.handle('update:install', (_e, filePath) => installUpdate(filePath));
 
 ipcMain.handle('print:list', async () => {
   try { return await mainWindow.webContents.getPrintersAsync(); } catch { return []; }

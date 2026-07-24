@@ -176,6 +176,30 @@ export async function rotateAllPages(bytes) {
   return { bytes: out, map: (p) => p };
 }
 
+// Copy pages from another document into this one (0-based `atIndex`). Powers
+// the Combine overlay: the source is never modified — the target simply gains
+// copies of the chosen pages. `sourceBytes` is normally the *saved* form of the
+// other tab (buildSavedPdf), so redactions and edits come across baked in.
+export async function insertPagesFrom(targetBytes, sourceBytes, sourceIndices, atIndex) {
+  const target = await PDFDocument.load(targetBytes, { ignoreEncryption: true });
+  const source = await PDFDocument.load(sourceBytes, { ignoreEncryption: true });
+  const idx = [...new Set(sourceIndices)]
+    .filter((i) => Number.isInteger(i) && i >= 0 && i < source.getPageCount())
+    .sort((a, b) => a - b);
+  if (!idx.length) return { bytes: targetBytes, map: (p) => p };
+  const at = Math.max(0, Math.min(atIndex | 0, target.getPageCount()));
+  const copied = await target.copyPages(source, idx);
+  copied.forEach((pg, k) => target.insertPage(at + k, pg));
+  const out = await target.save({ updateFieldAppearances: false });
+  const count = copied.length;
+  return {
+    // existing overlay edits on the target keep their page unless they sit at
+    // or after the insertion point, where they shift down by the copied count.
+    bytes: out,
+    map: (p) => (p - 1 >= at ? p + count : p),
+  };
+}
+
 export async function deletePage(bytes, index) {
   const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
   if (doc.getPageCount() <= 1) throw new Error('Cannot delete the only page');

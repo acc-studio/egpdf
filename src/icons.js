@@ -25,6 +25,7 @@ export const ICONS = {
   ocr: svg('<path d="M5.5 4.5h8.5l4 4V12"/><path d="M5.5 4.5v15H11"/><path d="M8.5 10h6M8.5 13h4"/><circle cx="16.5" cy="16.5" r="3.5"/><path d="m21.5 21.5-2.5-2.5"/>'),
   ocrarea: svg('<path d="M3.5 8V5.5c0-1.1.9-2 2-2H8M16 3.5h2.5c1.1 0 2 .9 2 2V8M3.5 16v2.5c0 1.1.9 2 2 2H8"/><path d="M7.5 9.5h9M7.5 12.5h6"/><circle cx="17" cy="17" r="3.5"/><path d="m22 22-2.5-2.5"/>'),
   trash: svg('<path d="M4.5 6.5h15M9.5 6V4.5h5V6M6.5 6.5 7.5 20h9l1-13.5M10 10v6.5M14 10v6.5"/>'),
+  combine: svg('<path d="M4 3.5h7l2.5 2.5V11"/><path d="M4 3.5V13h5"/><rect x="10" y="10" width="10.5" height="10.5" rx="1.3"/><path d="M15.25 12.75v5.5M12.5 15.5h5.5"/>'),
 };
 
 export function applyIcons(map) {

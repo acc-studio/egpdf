@@ -151,6 +151,13 @@ const checks = [
   ['zoom: typed percentage applies', r.zoom?.typedScale === 1.5 && r.zoom?.label === '150%'],
   ['zoom: preference persisted', r.zoom?.pref?.scale === 1.5],
   ['zoom: remembered for later documents', r.zoom?.newTabScale === 1.5 && r.zoom?.newTabFit === false],
+  ['combine: pages copied across documents', r.combine?.pages === 3],
+  ['combine: edits before the insertion point keep their page', r.combine?.mapBefore === 1],
+  ['combine: overlay shows a column per open document, closes cleanly',
+    r.combine?.columns >= 2 && r.combine?.closed === true],
+  ['combine: drop copies a page in, leaves the source untouched',
+    r.combine?.insert?.grew === true && r.combine?.insert?.sourceUntouched === true],
+  ['combine: Ctrl+Z undoes a combine', r.combine?.undoRestored === true],
 ];
 
 console.log('');

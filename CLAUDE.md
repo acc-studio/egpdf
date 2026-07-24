@@ -12,6 +12,7 @@ npm start              # build + run the Electron app
 npm test               # e2e suite against dev electron (test/run.mjs)
 npm run test:packaged  # same suite against a real packaged .exe (electron-builder --dir)
 npm run dist           # native installer for current platform → release/
+npm run release        # build installer + publish a GitHub Release (replaces CI; see below)
 node build-web.mjs     # static web build → web-dist/ (deployed to egpdf.vercel.app)
 ```
 
@@ -34,6 +35,12 @@ Renderer modules (all bundled by esbuild, pdf.js for viewing / pdf-lib for writi
 - `src/spellfix.js` — dictionary-backed OCR spelling repair: bundled tr+en frequency lists (`vendor/dict`, loaded via the `dictText` bridge so it works on desktop *and* web) generate candidate corrections, but a candidate is only ever accepted when it differs from the OCR output purely by known glyph confusions (`CONFUSION_PAIRS`) — **a fix must never change what the page visually says**; keep that invariant when touching anything here. The OS spellchecker (desktop only) is a fallback candidate source behind the same gate.
 - `src/print.js` — renders pages at print DPI **through the save pipeline** (so redactions/forms/edits print exactly as saved), M365-style preview, silent `webContents.print`.
 - `src/search.js`, `src/compare.js` (word-level Myers diff), `src/organizer.js` (thumbnail sidebar), `src/fonts.js`, `src/icons.js`.
+- `src/combine.js` — the Combine overlay: one thumbnail column per open tab, drag pages across documents to copy them in. A drop calls back into the renderer, which runs `insertPagesFrom` (save.js) as a structural op on the *target* tab (so it's undoable and remaps overlay edits); the source is never modified. Copies come from the source's `buildSavedPdf` output, so its edits/redactions come across baked in. Works on both desktop and web.
+- `src/update.js` — desktop self-update UI (banner + About dialog). All network access lives in `main.js`; this module only relays intent over the `window.native.update` bridge. On web `native.update` is null and the update controls hide themselves.
+
+## Self-update & privacy (desktop only)
+
+The updater is the **only** network access in the app, and it contacts nothing but GitHub: `checkForUpdate` reads the latest release's version; `downloadUpdate` fetches the platform installer asset (`egPDF-Setup.exe` / `.dmg` / `.AppImage`) on explicit request. No document data is ever sent. It auto-checks ~2.5s after launch unless disabled (userData `settings.json` → `autoUpdateCheck`, toggled in the About dialog reachable from the status-bar version button). Install launches the downloaded NSIS oneClick installer (which reinstalls in place and relaunches) and quits. Version comparison is numeric major.minor.patch against `app.getVersion()`. The auto-check is skipped in `--autotest` mode.
 
 ## Save-pipeline gotchas (breakage-prone, verified by the test suite)
 
@@ -57,9 +64,9 @@ Renderer modules (all bundled by esbuild, pdf.js for viewing / pdf-lib for writi
 
 ## Release & deploy
 
-- **Desktop**: pushing a `v*` tag runs CI (`.github/workflows/ci.yml`: Windows/macOS/Linux matrix, both test suites, installers) and publishes a GitHub Release. Release assets keep version-independent names (`egPDF-Setup.exe`, `egPDF.dmg`, `egPDF.AppImage`) — the README's `latest/download` links depend on this; never rename them.
-- **Web**: pushes to `main` auto-deploy to Vercel (egpdf.vercel.app) via `vercel.json` (`node build-web.mjs` → `web-dist/`, `npm install --ignore-scripts`). `.vercelignore` excludes build outputs and `*.pdf`; if a new asset directory doesn't reach the deploy, check it isn't ignored there.
-- Version lives in `package.json`; bump it before tagging.
+- **Desktop**: GitHub Actions is no longer available on this account, so there is **no CI** — releases are built and published locally with `npm run release` (`scripts/release.mjs`). It runs the e2e suite (`--skip-tests` to skip), builds the installer for the current platform via `electron-builder`, stages it under the version-independent name the README links depend on (`egPDF-Setup.exe` / `egPDF.dmg` / `egPDF.AppImage` — **never rename these**), pushes the `v<version>` tag, and creates/updates the GitHub Release via the `gh` CLI. Run it on Windows to ship the `.exe`; run it on macOS/Linux to add those platforms' assets to the same release. `--dry-run` builds and stages without tagging/publishing. Requires `gh auth login` with push access.
+- **Web**: pushes to `main` auto-deploy to Vercel (egpdf.vercel.app) via `vercel.json` (`node build-web.mjs` → `web-dist/`, `npm install --ignore-scripts`). This is Vercel's own GitHub integration, independent of Actions — unaffected by the restriction. `.vercelignore` excludes build outputs and `*.pdf`; if a new asset directory doesn't reach the deploy, check it isn't ignored there.
+- Version lives in `package.json`; bump it before running `npm run release`. The self-updater compares against the latest release tag, so a published release with a higher version is what triggers users' update banners.
 
 ## Windows dev environment notes
 

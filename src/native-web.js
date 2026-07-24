@@ -241,6 +241,12 @@ export function createNativeWeb() {
       }
     },
 
+    // Web build has no installed version and no self-updater — the About
+    // dialog shows "Web version" and hides its update controls.
+    async getVersion() { return null; },
+    openExternal(url) { if (/^https?:/i.test(url)) window.open(url, '_blank', 'noopener'); },
+    update: null,
+
     async getTestConfig() { return null; },
     async testCapture() { return false; },
     async testQuit() {},

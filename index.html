@@ -43,6 +43,7 @@
     <div class="tb-group">
       <button id="btn-split" class="icon-btn" title="Split view — two documents side by side"></button>
       <button id="btn-compare" class="icon-btn" title="Compare the two documents in split view"></button>
+      <button id="btn-combine" class="icon-btn" title="Combine — drag pages between open PDFs"></button>
     </div>
     <div class="tb-spacer"></div>
     <div class="tb-group" id="tools-group">
@@ -124,6 +125,47 @@
     </div>
   </div>
 
+  <div id="combine-overlay" class="hidden">
+    <div id="combine-header">
+      <span id="combine-title">Combine PDFs</span>
+      <span id="combine-hint" class="dim small">Drag pages from one document into another — the original keeps its copy. Ctrl/Shift-click to select several.</span>
+      <span class="tb-spacer"></span>
+      <button id="combine-done">Done</button>
+      <button id="combine-close" class="icon-btn" title="Done (Esc)">✕</button>
+    </div>
+    <div id="combine-cols"></div>
+  </div>
+
+  <div id="update-banner" class="hidden">
+    <span id="update-msg"></span>
+    <span class="tb-spacer"></span>
+    <button id="update-notes" class="linkish hidden">Release notes</button>
+    <button id="update-install">Update now</button>
+    <button id="update-later" class="icon-btn" title="Dismiss">✕</button>
+  </div>
+
+  <div id="about-popup" class="hidden">
+    <div id="about-card">
+      <div id="about-header">
+        <span>egPDF</span>
+        <span class="tb-spacer"></span>
+        <button id="about-close" class="icon-btn" title="Close (Esc)">✕</button>
+      </div>
+      <div id="about-version" class="dim"></div>
+      <div id="about-updates">
+        <div class="about-row">
+          <button id="about-check">Check for updates</button>
+          <span id="about-check-status" class="dim small"></span>
+        </div>
+        <label class="about-toggle">
+          <input type="checkbox" id="about-autocheck" />
+          Check for updates automatically at startup
+        </label>
+        <p class="dim small">egPDF only ever contacts GitHub to look for a newer version — never your documents.</p>
+      </div>
+    </div>
+  </div>
+
   <div id="print-container"></div>
 
   <div id="print-overlay" class="hidden">
@@ -196,6 +238,7 @@
     <span id="status-left"></span>
     <span class="tb-spacer"></span>
     <span id="status-right" class="dim"></span>
+    <button id="status-version" class="dim" title="About egPDF & updates">egPDF</button>
   </div>
 
   <script src="dist/renderer.js"></script>

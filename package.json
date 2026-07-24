@@ -1,7 +1,7 @@
 {
   "name": "egpdf",
   "productName": "egPDF",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Minimal local PDF reader and editor",
   "main": "main.js",
   "scripts": {
@@ -9,7 +9,8 @@
     "start": "npm run build && electron .",
     "test": "node test/run.mjs",
     "test:packaged": "node test/run.mjs --packaged",
-    "dist": "npm run build && electron-builder --publish never"
+    "dist": "npm run build && electron-builder --publish never",
+    "release": "node scripts/release.mjs"
   },
   "author": "Aziz Can Cengiz",
   "license": "MIT",

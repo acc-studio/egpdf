@@ -6,7 +6,6 @@
 No network access, no accounts, no telemetry — your files never leave your machine.</p>
 
 <p align="center">
-  <a href="https://github.com/acc-studio/egpdf/actions/workflows/ci.yml"><img src="https://github.com/acc-studio/egpdf/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/acc-studio/egpdf/releases/latest"><img src="https://img.shields.io/github/v/release/acc-studio/egpdf" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license"></a>
 </p>
@@ -42,6 +41,7 @@ The full suite also runs in the browser at **https://egpdf.vercel.app** — same
 - **Split view** — the split button shows two documents side by side; click a pane to focus it, then pick a tab for it.
 - **Compare** — with two documents in split view, the compare button diffs their text word-by-word; click a difference to jump both panes to it.
 - **Pages panel** — the sidebar button shows page thumbnails: drag to reorder, hover a page to rotate 90°, OCR it, or delete it. The toolbar's rotate button rotates every page in the document 90° at once. `Ctrl+Z` undoes page changes.
+- **Combine** — with two or more PDFs open, the combine button opens a full-screen view with every document as a column of page thumbnails. Drag a page (Ctrl/Shift-click to grab several) from one document into another to drop a *copy* in at the exact spot you want — the original is left untouched. Each drop is undoable with `Ctrl+Z`, and the result saves like any other document.
 - **OCR** — the toolbar's OCR button makes scanned pages searchable: every page without a text layer is recognized (Turkish, English, German + Arabic) and an invisible text layer is written into the PDF, so the text becomes selectable, searchable, and copyable — here and in any other viewer. Recognition runs entirely on your machine (the engine and language models ship inside the app); nothing is uploaded anywhere. Individual pages can be OCR'd from the pages panel.
 - **Extract text from an area (X)** — drag a box over any part of a page (scanned or not) and get its recognized text in a popup, ready to copy. Nothing is written into the document. Obvious OCR mistakes are fixed automatically: merged words are split, missing spaces after punctuation restored, ligatures normalized, end-of-line hyphenation joined, and glyph confusions repaired against bundled Turkish + English dictionaries ("reguested" → "requested", "davaci" → "davacı") — a correction is only accepted when it differs purely by characters OCR is known to confuse, so a fix can never change what the page visually says. All of this also applies to the invisible text layer written by full-page OCR.
 - **Text selection** — select text with the mouse to copy it, or use the popup that appears: **Highlight**, **Edit text** (whites out the selection and opens a pre-filled, size-matched text box to retype), or **Redact**.
@@ -60,6 +60,10 @@ The full suite also runs in the browser at **https://egpdf.vercel.app** — same
 
 Save with `Ctrl+S`, Save As with `Ctrl+Shift+S`; dirty tabs show a `•`.
 
+## Updates
+
+egPDF keeps itself up to date: on launch it quietly checks GitHub for a newer release and, if one exists, shows a banner with an **Update now** button that downloads and runs the installer for you. This is the only time the app ever touches the network, and it sends nothing but a version check — your documents never leave your machine. Click the version in the status bar (bottom-right) to check manually or turn the automatic check off.
+
 ## Run from source
 
 ```
@@ -77,3 +81,18 @@ Builds a native package for the current platform (DMG on macOS, NSIS installer
 on Windows, AppImage on Linux). After installing on Windows, right-click
 any PDF → **Open with → Choose another app → egPDF → Always** to make it the
 default PDF app.
+
+## Publishing a release
+
+```
+npm run release
+```
+
+Bump `version` in `package.json`, then run this on the platform you want to ship
+(Windows for `egPDF-Setup.exe`). It runs the test suite, builds the installer,
+tags `v<version>`, and publishes a GitHub Release with the installer attached
+under a version-independent name (so the download links above always point at
+the newest build). Needs the [GitHub CLI](https://cli.github.com/)
+authenticated (`gh auth login`). Use `--skip-tests` to build faster or
+`--dry-run` to stage without publishing. The web version deploys itself from
+`main` via Vercel.

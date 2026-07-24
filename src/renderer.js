@@ -8,11 +8,13 @@ import {
 import { ocrArea } from './ocrbox.js';
 import { openPrintPreview, isPrintPreviewOpen } from './print.js';
 import { detectAvailableFonts } from './fonts.js';
-import { buildSavedPdf, reorderPages, rotatePage, rotateAllPages, deletePage } from './save.js';
+import { buildSavedPdf, reorderPages, rotatePage, rotateAllPages, deletePage, insertPagesFrom } from './save.js';
 import { ocrRun, scannedPages, pageHasText } from './ocr.js';
 import { Search } from './search.js';
 import { compareDocs } from './compare.js';
 import { Organizer } from './organizer.js';
+import { Combine } from './combine.js';
+import { initUpdates } from './update.js';
 
 const $ = (id) => document.getElementById(id);
 const native = window.native;
@@ -536,6 +538,34 @@ function closeComparePanel() {
   $('compare-panel').classList.add('hidden');
 }
 
+// ---------------------------------------------------------------- combine
+
+// Copy pages (1-based) from one open tab into another at a 0-based index. Runs
+// as a structural op on the target (undoable, remaps its overlay edits); the
+// source is untouched. The copy comes from the source's *saved* form, so its
+// edits/redactions come across baked in.
+async function combineInsert(targetTab, sourceTab, pages, atIndex) {
+  const srcBytes = await buildSavedPdf(sourceTab);
+  const indices = pages.map((p) => p - 1);
+  await structuralOp(targetTab, (b) => insertPagesFrom(b, srcBytes, indices, atIndex));
+  setStatus(`Copied ${pages.length} page${pages.length === 1 ? '' : 's'} from “${sourceTab.title}” into “${targetTab.title}” · Ctrl+Z to undo`);
+}
+
+const combine = new Combine({
+  el: $('combine-overlay'),
+  colsEl: $('combine-cols'),
+  getTabs: () => tabs,
+  onInsert: combineInsert,
+});
+
+function openCombine() {
+  if (tabs.length < 2) {
+    setStatus('Open at least two PDFs, then use Combine to drag pages between them', true);
+    return;
+  }
+  combine.open();
+}
+
 // ---------------------------------------------------------------- printing
 
 let printing = false;
@@ -701,7 +731,12 @@ $('btn-rotate-doc').addEventListener('click', () => structuralOp(active, (b) => 
 $('btn-ocr').addEventListener('click', () => runOcr());
 $('btn-split').addEventListener('click', toggleSplit);
 $('btn-compare').addEventListener('click', runCompare);
+$('btn-combine').addEventListener('click', openCombine);
+$('combine-close').addEventListener('click', () => combine.close());
+$('combine-done').addEventListener('click', () => combine.close());
 $('compare-close').addEventListener('click', closeComparePanel);
+
+const updates = initUpdates({ native, setStatus });
 $('btn-undo').addEventListener('click', undo);
 $('btn-search').addEventListener('click', () => toggleSearch($('searchbar').classList.contains('hidden')));
 
@@ -811,6 +846,16 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (inField) return;
+  // While the combine overlay / About dialog is up, swallow the single-key
+  // tool shortcuts — only Escape (to close) does anything.
+  if (combine.isOpen()) {
+    if (e.key === 'Escape') combine.close();
+    return;
+  }
+  if (updates.isAboutOpen()) {
+    if (e.key === 'Escape') updates.closeAbout();
+    return;
+  }
   if (e.key === 'Delete' || e.key === 'Backspace') {
     if (deleteSelected()) e.preventDefault();
   } else if (e.key === 'Escape') {
@@ -869,6 +914,23 @@ import('./autotest.js').then((m) =>
     toggleSidebar,
     getPanes: () => paneTabs,
     getFonts: () => availableFonts,
+    combine: {
+      open: () => openCombine(),
+      close: () => combine.close(),
+      columns: () => combine.columnCount(),
+      // Drive the real drop path: copy `pages` from another open tab into the
+      // active one at index `at`, returning page counts so the test can verify
+      // the target grew and the source was left alone.
+      testInsert: async (pages = [1], at = 0) => {
+        const target = active;
+        const source = tabs.find((t) => t !== target);
+        if (!source) return null;
+        const before = target.pdf.numPages;
+        const sourcePages = source.pdf.numPages;
+        await combineInsert(target, source, pages, at);
+        return { before, after: target.pdf.numPages, sourcePages, sourceAfter: source.pdf.numPages };
+      },
+    },
     ops: {
       rotate: (n) => structuralOp(active, (b) => rotatePage(b, n - 1)),
       reorder: (from, to) => structuralOp(active, (b) => reorderPages(b, from, to)),
