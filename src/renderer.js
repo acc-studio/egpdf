@@ -885,18 +885,76 @@ $('search-close').addEventListener('click', () => toggleSearch(false));
 window.addEventListener('keydown', (e) => {
   const inField = e.target.closest('input, select, textarea, [contenteditable="true"], .annotationLayer');
   const mod = e.ctrlKey || e.metaKey;
+
+  // Global Function keys
+  if (e.key === 'F1') {
+    e.preventDefault();
+    updates.openAbout();
+    return;
+  }
+  if (e.key === 'F3') {
+    e.preventDefault();
+    if (search.query) search.next(e.shiftKey ? -1 : 1);
+    else toggleSearch(true);
+    return;
+  }
+  if (e.key === 'F4') {
+    e.preventDefault();
+    toggleSidebar();
+    return;
+  }
+  if (e.key === 'F11') {
+    e.preventDefault();
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else document.documentElement.requestFullscreen?.();
+    return;
+  }
+
   if (mod) {
     const k = e.key.toLowerCase();
-    if (k === 'o') { e.preventDefault(); openDialog(); }
+    if (k === 'o' && !e.shiftKey) { e.preventDefault(); openDialog(); }
     else if (k === 's') { e.preventDefault(); saveActive(e.shiftKey); }
     else if (k === 'p') { e.preventDefault(); printActive(); }
-    else if (k === 'w') { e.preventDefault(); if (active) closeTab(active); }
+    else if (k === 'w' && !e.shiftKey) { e.preventDefault(); if (active) closeTab(active); }
+    else if (k === 'w' && e.shiftKey) {
+      e.preventDefault();
+      const dirty = tabs.filter(isDirty);
+      if (dirty.length && !confirm(`You have ${dirty.length} document${dirty.length === 1 ? '' : 's'} with unsaved changes. Close all anyway?`)) return;
+      while (tabs.length) closeTab(tabs[0]);
+    }
+    else if (k === 'q') {
+      e.preventDefault();
+      const dirty = tabs.filter(isDirty);
+      if (dirty.length && !confirm(`You have ${dirty.length} document${dirty.length === 1 ? '' : 's'} with unsaved changes. Quit anyway?`)) return;
+      window.close();
+    }
     else if (k === 'f') { e.preventDefault(); toggleSearch(true); }
-    else if (k === 'z' && !inField) { e.preventDefault(); undo(); }
+    else if (k === 'g') {
+      e.preventDefault();
+      $('page-input').focus();
+      $('page-input').select();
+    }
+    else if (k === 'b') { e.preventDefault(); toggleSidebar(); }
+    else if (k === 'r' && e.shiftKey) { e.preventDefault(); if (active) structuralOp(active, (b) => rotateAllPages(b)); }
+    else if (k === 'e' && e.shiftKey) { e.preventDefault(); if (active) splitPdf.open(); }
+    else if ((k === 'c' && e.shiftKey) || (k === 'm' && !e.shiftKey)) { e.preventDefault(); if (tabs.length >= 2) openCombine(); }
+    else if (k === 'k' && e.shiftKey) { e.preventDefault(); if (tabs.length >= 2) runCompare(); }
+    else if ((k === 'o' || k === 'x') && e.shiftKey) { e.preventDefault(); if (active) runOcr(); }
+    else if ((k === 'z' || k === 'y') && !inField) { e.preventDefault(); undo(); }
+    else if (k === '/' || k === '?') { e.preventDefault(); updates.openAbout(); }
     else if (e.key === '=' || e.key === '+') { e.preventDefault(); zoomBy(1.15); }
     else if (e.key === '-') { e.preventDefault(); zoomBy(1 / 1.15); }
     else if (e.key === '0') { e.preventDefault(); if (active) { active.view.setZoom(1); updateZoomLabel(); } }
     else if (e.key === '\\') { e.preventDefault(); toggleSplit(); }
+    else if (e.key === 'Home') { e.preventDefault(); if (active) active.view.scrollToPage(1); }
+    else if (e.key === 'End') { e.preventDefault(); if (active) active.view.scrollToPage(active.pdf.numPages); }
+    else if (e.key >= '1' && e.key <= '8') {
+      const idx = parseInt(e.key, 10) - 1;
+      if (tabs[idx]) { e.preventDefault(); activateTab(tabs[idx]); }
+    }
+    else if (e.key === '9') {
+      if (tabs.length) { e.preventDefault(); activateTab(tabs[tabs.length - 1]); }
+    }
     else if (e.key === 'Tab' && tabs.length > 1) {
       e.preventDefault();
       const i = tabs.indexOf(active);
@@ -905,6 +963,7 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (inField) return;
+
   // While the combine overlay / Split overlay / About dialog is up, swallow the single-key
   // tool shortcuts — only Escape (to close) does anything.
   if (splitPdf.isOpen()) {
@@ -927,14 +986,42 @@ window.addEventListener('keydown', (e) => {
     setTool('select');
     closeComparePanel();
     closeOcrPopup();
-  } else if (e.key === 'v') setTool('select');
+  } else if (e.key === 'PageDown' || e.key === ' ' || e.key === 'j' || e.key === 'n') {
+    if (active) {
+      e.preventDefault();
+      active.view.scrollToPage(Math.min(active.pdf.numPages, active.view.currentPageNum + 1));
+    }
+  } else if (e.key === 'PageUp' || (e.key === ' ' && e.shiftKey) || e.key === 'k' || e.key === 'p') {
+    if (active) {
+      e.preventDefault();
+      active.view.scrollToPage(Math.max(1, active.view.currentPageNum - 1));
+    }
+  } else if (e.key === 'Home') {
+    if (active) { e.preventDefault(); active.view.scrollToPage(1); }
+  } else if (e.key === 'End') {
+    if (active) { e.preventDefault(); active.view.scrollToPage(active.pdf.numPages); }
+  } else if (e.key === 'v' || e.key === 's') setTool('select');
   else if (e.key === 'r') setTool('redact');
-  else if (e.key === 'w') setTool('whiteout');
+  else if (e.key === 'w' || e.key === 'e') setTool('whiteout');
   else if (e.key === 'h') setTool('highlight');
   else if (e.key === 't') setTool('text');
   else if (e.key === 'c') setTool('note');
   else if (e.key === 'x') setTool('ocrarea');
   else if (e.key === 'i') startImageTool();
+});
+
+// Save reminder when quitting or reloading with unsaved changes
+window.addEventListener('beforeunload', (e) => {
+  if (window.testMode) return;
+  const dirty = tabs.filter(isDirty);
+  if (dirty.length > 0) {
+    const msg = dirty.length === 1
+      ? `"${dirty[0].title}" has unsaved changes. Are you sure you want to quit?`
+      : `You have ${dirty.length} documents with unsaved changes. Are you sure you want to quit?`;
+    e.preventDefault();
+    e.returnValue = msg;
+    return msg;
+  }
 });
 
 // drag & drop
@@ -959,6 +1046,7 @@ window.addEventListener('drop', async (e) => {
 window.addEventListener('resize', refitAll);
 
 native.onOpenPaths((paths) => openPaths(paths));
+native.testConfig?.().then((cfg) => { if (cfg) window.testMode = true; });
 
 // Programmatic open hook — used by the web build's smoke test and available
 // to anything embedding the app.

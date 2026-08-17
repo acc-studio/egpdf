@@ -485,7 +485,10 @@ if (TEST_MODE) {
     fs.writeFileSync(out, img.toPNG());
     return true;
   });
-  ipcMain.handle('test:quit', () => app.quit());
+  ipcMain.handle('test:quit', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.destroy();
+    app.quit();
+  });
   app.on('web-contents-created', (_e, wc) => {
     wc.on('console-message', (_ev, _level, msg, line, src) =>
       console.log(`[renderer] ${msg} (${src}:${line})`));

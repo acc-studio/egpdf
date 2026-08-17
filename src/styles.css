@@ -767,26 +767,56 @@ body.dragging #viewer-root::after {
 #about-popup {
   position: fixed; inset: 0; z-index: 96;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(0,0,0,0.28);
+  background: rgba(0,0,0,0.38);
+  backdrop-filter: blur(2px);
 }
 #about-popup.hidden { display: none; }
 #about-card {
-  width: 380px; max-width: calc(100% - 32px);
+  width: 520px; max-width: calc(100vw - 32px); max-height: 85vh;
   background: var(--surface); border-radius: 10px;
+  border: 1px solid var(--border);
   box-shadow: var(--shadow);
-  padding: 18px 20px 20px 20px;
-  display: flex; flex-direction: column; gap: 12px;
+  padding: 20px 22px 22px 22px;
+  display: flex; flex-direction: column; gap: 14px;
+  overflow-y: auto;
 }
 #about-header { display: flex; align-items: center; font-size: 18px; font-weight: 600; }
-#about-version { font-size: 13px; }
+#about-version { font-size: 13px; margin-top: -6px; }
+.about-section-title {
+  font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--text-dim); margin-top: 4px; padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.about-shortcuts-list {
+  display: flex; flex-direction: column; gap: 6px;
+  max-height: 280px; overflow-y: auto;
+  padding-right: 4px;
+}
+.about-sc-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-size: 13px; padding: 2px 0;
+}
+.about-sc-desc { color: var(--text); }
+.about-sc-keys { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+kbd {
+  font-family: inherit; font-size: 11px; font-weight: 600;
+  padding: 2px 6px; border-radius: 4px;
+  background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+#about-updates {
+  display: flex; flex-direction: column; gap: 10px;
+  padding-top: 10px; border-top: 1px solid var(--border);
+}
 #about-updates.hidden { display: none; }
 .about-row { display: flex; align-items: center; gap: 12px; }
 #about-check {
   font: inherit; padding: 7px 14px;
   border: 1px solid var(--border); border-radius: 5px;
-  background: var(--surface); color: var(--text); cursor: pointer;
+  background: var(--surface-2); color: var(--text); cursor: pointer;
 }
-#about-check:hover { background: rgba(127,127,127,0.10); }
+#about-check:hover { background: rgba(127,127,127,0.14); }
 #about-check:disabled { opacity: 0.5; cursor: default; }
 .about-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
 #about-updates p { margin: 0; }

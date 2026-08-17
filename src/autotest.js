@@ -33,6 +33,7 @@ function makeTestImageB64() {
 export async function maybeRunAutotest(ctx) {
   const dir = await window.native.getTestConfig();
   if (!dir) return;
+  window.testMode = true;
   // Join with the host's separator (the dir is passed in OS-native form).
   const sep = dir.includes('\\') ? '\\' : '/';
   const base = dir.endsWith(sep) ? dir : dir + sep;
