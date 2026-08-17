@@ -8,6 +8,7 @@ export class Combine {
    * opts: {
    *   el,                              // #combine-overlay
    *   colsEl,                          // #combine-cols
+   *   previewEl,                       // #combine-preview
    *   getTabs(),                       // → open tabs, in tab-bar order
    *   onInsert(target, source, pages, atIndex),  // pages are 1-based; async
    *   onClose(),
@@ -193,6 +194,59 @@ export class Combine {
     });
   }
 
+  // Pre-computes and maps thumbnail & preview caches across document reload
+  // so no thumbnail in the target document ever flashes or re-renders.
+  remapInsertCaches(targetTab, sourceTab, pages, atIndex) {
+    const oldTargetPdf = targetTab.pdf;
+    const oldTargetCache = this.cacheFor(oldTargetPdf);
+    const sourceCache = this.cacheFor(sourceTab.pdf);
+    const oldTargetPreviewCache = this.previewCacheFor(oldTargetPdf);
+    const sourcePreviewCache = this.previewCacheFor(sourceTab.pdf);
+
+    const count = pages.length;
+    const nextThumbCache = new Map();
+    const nextPreviewCache = new Map();
+
+    const cloneCanvas = (c) => {
+      if (!c) return null;
+      const copy = document.createElement('canvas');
+      copy.width = c.width;
+      copy.height = c.height;
+      const ctx = copy.getContext('2d');
+      ctx.drawImage(c, 0, 0);
+      return copy;
+    };
+
+    // 1) Existing pages before the insertion point (1..atIndex)
+    for (let p = 1; p <= atIndex; p++) {
+      if (oldTargetCache.has(p)) nextThumbCache.set(p, oldTargetCache.get(p));
+      if (oldTargetPreviewCache.has(p)) nextPreviewCache.set(p, oldTargetPreviewCache.get(p));
+    }
+
+    // 2) Newly inserted pages copied from sourceTab
+    pages.forEach((srcPage, idx) => {
+      const targetPageNum = atIndex + 1 + idx;
+      const srcThumb = sourceCache.get(srcPage);
+      if (srcThumb) {
+        nextThumbCache.set(targetPageNum, cloneCanvas(srcThumb));
+      }
+      const srcPreview = sourcePreviewCache.get(srcPage);
+      if (srcPreview) {
+        nextPreviewCache.set(targetPageNum, cloneCanvas(srcPreview));
+      }
+    });
+
+    // 3) Existing pages at/after the insertion point (shifted down by count)
+    for (const [p, canvas] of oldTargetCache) {
+      if (p > atIndex) nextThumbCache.set(p + count, canvas);
+    }
+    for (const [p, canvas] of oldTargetPreviewCache) {
+      if (p > atIndex) nextPreviewCache.set(p + count, canvas);
+    }
+
+    return { nextThumbCache, nextPreviewCache };
+  }
+
   async applyInsert(targetTab, drag, atIndex) {
     if (this.busy) return;
     const source = this.opts.getTabs().find((t) => t.id === drag.tabId);
@@ -200,11 +254,15 @@ export class Combine {
     this.busy = true;
     this.el.classList.add('working');
     try {
+      const { nextThumbCache, nextPreviewCache } = this.remapInsertCaches(targetTab, source, drag.pages, atIndex);
       await this.opts.onInsert(targetTab, source, drag.pages, atIndex);
+      // targetTab.pdf was updated to the new PDF instance by onInsert
+      this.caches.set(targetTab.pdf, nextThumbCache);
+      this.previewCaches.set(targetTab.pdf, nextPreviewCache);
     } finally {
       this.busy = false;
       this.el.classList.remove('working');
-      this.render(); // the target's pdf was reloaded by the insert
+      this.render(); // all thumbnails & preview pages already in cache, zero reload!
     }
   }
 
@@ -309,7 +367,7 @@ export class Combine {
       wrap.className = 'cp-page-wrap';
       wrap.dataset.tabId = tab.id;
       wrap.dataset.page = n;
-      wrap.innerHTML = `<div class="cp-page"></div><div class="cp-page-num">${n}</div>`;
+      wrap.innerHTML = `<div class="cp-page"></div><div class="cp-page-num">Page ${n}</div>`;
       this.previewEl.appendChild(wrap);
       this.previewObserver.observe(wrap);
     }
@@ -336,7 +394,7 @@ export class Combine {
       let canvas = cache.get(n);
       if (!canvas) {
         const page = await tab.pdf.getPage(n);
-        const targetW = Math.max(240, Math.min(620, this.previewEl.clientWidth - 48));
+        const targetW = Math.max(300, Math.min(840, this.previewEl.clientWidth - 80));
         const scale = targetW / page.getViewport({ scale: 1 }).width;
         const viewport = page.getViewport({ scale });
         canvas = document.createElement('canvas');

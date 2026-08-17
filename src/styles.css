@@ -527,39 +527,72 @@ body.dragging #viewer-root::after {
   background: var(--accent); color: #fff; cursor: pointer;
 }
 #combine-done:hover { filter: brightness(1.08); }
-#combine-body { flex: 1; display: flex; min-height: 0; }
+#combine-body {
+  flex: 1; display: flex; min-height: 0;
+  overflow: hidden;
+}
 #combine-cols {
-  flex: 1; display: flex; gap: 0;
+  flex: none; display: flex; gap: 0;
   overflow-x: auto; overflow-y: hidden;
   align-items: stretch;
+  background: var(--surface-2);
+  border-right: 1px solid var(--border);
+  max-width: 60%;
 }
 #combine-preview {
-  flex: none; width: 42%; max-width: 660px; min-width: 300px;
-  border-left: 1px solid var(--border);
-  background: var(--surface-2);
+  flex: 1; min-width: 320px;
+  background: var(--bg);
   overflow-y: auto; overflow-x: hidden;
-  padding: 18px 20px 40px 20px;
+  padding: 24px 32px 60px 32px;
+  display: flex; flex-direction: column;
+  align-items: center;
 }
-#combine-preview-hint { margin-top: 8px; }
-#combine-preview-title { font-weight: 600; margin-bottom: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#combine-preview-hint {
+  margin-top: 40px;
+  font-size: 13px;
+  color: var(--text-dim);
+  text-align: center;
+}
+#combine-preview-title {
+  width: 100%; max-width: 780px;
+  font-size: 15px; font-weight: 600;
+  margin-bottom: 20px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--text);
+  text-align: left;
+}
+.cp-page-wrap {
+  width: 100%; max-width: 780px;
+  display: flex; flex-direction: column;
+  align-items: center;
+  margin-bottom: 24px;
+}
 .cp-page {
-  margin: 0 auto 16px auto; background: #fff;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.22); border-radius: 3px;
-  overflow: hidden; min-height: 120px;
+  width: 100%; background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.10);
+  border-radius: 4px;
+  overflow: hidden; min-height: 140px;
 }
-.cp-page canvas { display: block; width: 100%; }
-.cp-page-num { text-align: center; font-size: 11px; color: var(--text-dim); margin: 4px 0 0 0; }
+.cp-page canvas { display: block; width: 100%; height: auto; }
+.cp-page-num {
+  text-align: center; font-size: 12px;
+  color: var(--text-dim); margin: 6px 0 0 0;
+}
 .combine-col {
-  flex: none; width: 196px;
+  flex: none; width: 184px;
   display: flex; flex-direction: column;
   border-right: 1px solid var(--border);
   min-height: 0;
+  background: var(--surface-2);
+}
+.combine-col:last-child {
+  border-right: none;
 }
 .combine-col-head {
   flex: none; padding: 10px 14px;
   font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   border-bottom: 1px solid var(--border);
-  background: var(--surface-2);
+  background: var(--surface);
   cursor: pointer;
 }
 .combine-col-head:hover { background: rgba(127,127,127,0.12); }
