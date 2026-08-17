@@ -64,9 +64,9 @@ The updater is the **only** network access in the app, and it contacts nothing b
 
 ## Release & deploy
 
-- **Desktop**: GitHub Actions is no longer available on this account, so there is **no CI** — releases are built and published locally with `npm run release` (`scripts/release.mjs`). It runs the e2e suite (`--skip-tests` to skip), builds the installer for the current platform via `electron-builder`, stages it under the version-independent name the README links depend on (`egPDF-Setup.exe` / `egPDF.dmg` / `egPDF.AppImage` — **never rename these**), pushes the `v<version>` tag, and creates/updates the GitHub Release via the `gh` CLI. Run it on Windows to ship the `.exe`; run it on macOS/Linux to add those platforms' assets to the same release. `--dry-run` builds and stages without tagging/publishing. Requires `gh auth login` with push access.
-- **Web**: pushes to `main` auto-deploy to Vercel (egpdf.vercel.app) via `vercel.json` (`node build-web.mjs` → `web-dist/`, `npm install --ignore-scripts`). This is Vercel's own GitHub integration, independent of Actions — unaffected by the restriction. `.vercelignore` excludes build outputs and `*.pdf`; if a new asset directory doesn't reach the deploy, check it isn't ignored there.
-- Version lives in `package.json`; bump it before running `npm run release`. The self-updater compares against the latest release tag, so a published release with a higher version is what triggers users' update banners.
+- **Desktop**: GitHub Actions runs on every push and PR (`.github/workflows/ci.yml`), testing and building on Windows, macOS, and Linux runners. Tag pushes (`v*`) automatically package and attach `egPDF-Setup.exe`, `egPDF.dmg`, and `egPDF.AppImage` to GitHub Releases. Releases can also be built and published locally with `npm run release` (`scripts/release.mjs`).
+- **Web**: pushes to `main` auto-deploy to Vercel (egpdf.vercel.app) via `vercel.json` (`node build-web.mjs` → `web-dist/`, `npm install --ignore-scripts`). This is Vercel's own GitHub integration, independent of Actions. `.vercelignore` excludes build outputs and `*.pdf`; if a new asset directory doesn't reach the deploy, check it isn't ignored there.
+- Version lives in `package.json`; bump it before tagging/releasing. The self-updater compares against the latest release tag, so a published release with a higher version is what triggers users' update banners.
 
 ## Windows dev environment notes
 
