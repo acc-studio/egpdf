@@ -297,9 +297,14 @@ async function reloadTab(tab, bytes, { filePath = tab.filePath, edits = tab.edit
       organizer.rotateThumb(changeInfo.index + 1, tab.pdf);
     } else if (changeInfo?.op === 'reorder') {
       organizer.reorderThumb(changeInfo.from, changeInfo.to, tab.pdf, changeInfo.map);
+    } else if (changeInfo?.op === 'insert') {
+      organizer.insertThumbs(changeInfo.at, changeInfo.count, tab.pdf);
     } else {
+      if (tab._thumbStore) tab._thumbStore.cache.clear();
       organizer.show(tab);
     }
+  } else if (!changeInfo) {
+    if (tab._thumbStore) tab._thumbStore.cache.clear();
   }
   renderTabBar();
 }
@@ -465,8 +470,8 @@ const organizer = new Organizer({
   onReorder: (from, to) => structuralOp(active, (b) => reorderPages(b, from, to)),
 });
 
-function toggleSidebar() {
-  sidebarVisible = !sidebarVisible;
+function toggleSidebar(force = null) {
+  sidebarVisible = force !== null ? !!force : !sidebarVisible;
   $('sidebar').classList.toggle('hidden', !sidebarVisible);
   if (sidebarVisible) organizer.show(active);
   else organizer.show(null);

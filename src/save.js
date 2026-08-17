@@ -200,6 +200,8 @@ export async function insertPagesFrom(targetBytes, sourceBytes, sourceIndices, a
     // or after the insertion point, where they shift down by the copied count.
     bytes: out,
     op: 'insert',
+    at,
+    count,
     map: (p) => (p - 1 >= at ? p + count : p),
   };
 }

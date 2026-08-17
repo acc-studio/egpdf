@@ -332,8 +332,10 @@ export class Combine {
         cache.set(n, canvas);
       }
       if (this.gen !== gen) return; // overlay re-rendered while we waited
-      thumb.querySelector('.combine-thumb-box').replaceChildren(canvas);
-      thumb._rendered = true;
+      if (canvas) {
+        thumb.querySelector('.combine-thumb-box').replaceChildren(canvas);
+        thumb._rendered = true;
+      }
     } catch { /* thumbnail is cosmetic */ }
     finally { thumb._rendering = false; }
   }
@@ -368,12 +370,17 @@ export class Combine {
       wrap.dataset.tabId = tab.id;
       wrap.dataset.page = n;
       wrap.innerHTML = `<div class="cp-page"></div><div class="cp-page-num">Page ${n}</div>`;
+      const cached = this.previewCacheFor(tab.pdf).get(n);
+      if (cached) {
+        wrap.querySelector('.cp-page').replaceChildren(cached);
+        wrap._rendered = true;
+      }
       this.previewEl.appendChild(wrap);
       this.previewObserver.observe(wrap);
     }
     // render the first page right away so the pane is never blank
     const first = this.previewEl.querySelector('.cp-page-wrap');
-    if (first) this.renderPreviewPage(first);
+    if (first && !first._rendered) this.renderPreviewPage(first);
   }
 
   previewCacheFor(pdf) {
@@ -409,8 +416,10 @@ export class Combine {
         cache.set(n, canvas);
       }
       if (this.gen !== gen) return; // overlay re-rendered while we waited
-      wrap.querySelector('.cp-page').replaceChildren(canvas);
-      wrap._rendered = true;
+      if (canvas) {
+        wrap.querySelector('.cp-page').replaceChildren(canvas);
+        wrap._rendered = true;
+      }
     } catch { /* preview is cosmetic */ }
     finally { wrap._rendering = false; }
   }

@@ -158,6 +158,8 @@ const checks = [
   ['combine: header click renders a preview', r.combine?.previewCanvases >= 1],
   ['combine: drop copies a page in, leaves the source untouched',
     r.combine?.insert?.grew === true && r.combine?.insert?.sourceUntouched === true],
+  ['combine: sidebar thumbnails valid after insert',
+    r.combine?.insertSidebar?.hasUndefinedText === false && r.combine?.insertSidebar?.allRendered === true],
   ['combine: Ctrl+Z undoes a combine', r.combine?.undoRestored === true],
   ['split: overlay opens and selects page range',
     r.split?.opened === true && r.split?.allSelected === true && r.split?.rangeSelected === true],

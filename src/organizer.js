@@ -193,7 +193,7 @@ export class Organizer {
     }
   }
 
-  // Fast incremental reordering: repositions DOM element and remaps cache
+    // Fast incremental reordering: repositions DOM element and remaps cache
   reorderThumb(from, to, newPdf, map) {
     const thumbs = [...this.el.querySelectorAll('.thumb')];
     const moving = thumbs[from];
@@ -230,6 +230,26 @@ export class Organizer {
     }
   }
 
+  // Fast incremental insertion: remaps cached canvases and re-renders sidebar
+  insertThumbs(at, count, newPdf) {
+    const nextCache = new Map();
+    for (const [p, canvas] of this.cache) {
+      if (p <= at) nextCache.set(p, canvas);
+      else nextCache.set(p + count, canvas);
+    }
+    this.cache = nextCache;
+    this.pending.clear();
+    if (this.tab) {
+      const store = this.getStore(this.tab);
+      store.cache = this.cache;
+      store.pending = this.pending;
+      this.tab.pdf = newPdf;
+      this.caches.set(newPdf, store);
+      this.cachePdf = newPdf;
+    }
+    this.show(this.tab);
+  }
+
   // Warm the thumbnail cache in the background so scrolling the panel (and
   // reopening it) doesn't wait on renders. Paced to leave the pdf.js worker
   // mostly free for the main view; capped for very large documents.
@@ -243,8 +263,11 @@ export class Organizer {
       if (this.gen !== gen || this.cachePdf !== pdf) return;
       const t = this.el.querySelector(`.thumb[data-page="${n}"]`);
       if (t && !t._rendered) {
-        t.querySelector('.thumb-canvas-box').replaceChildren(this.cache.get(n));
-        t._rendered = true;
+        const c = this.cache.get(n);
+        if (c) {
+          t.querySelector('.thumb-canvas-box').replaceChildren(c);
+          t._rendered = true;
+        }
       }
       await new Promise((r) => setTimeout(r, 15));
     }
@@ -294,8 +317,10 @@ export class Organizer {
       const n = +thumb.dataset.page;
       const canvas = await this.renderThumbCanvas(n, tab.pdf);
       if (this.tab !== tab) return;
-      thumb.querySelector('.thumb-canvas-box').replaceChildren(canvas);
-      thumb._rendered = true;
+      if (canvas) {
+        thumb.querySelector('.thumb-canvas-box').replaceChildren(canvas);
+        thumb._rendered = true;
+      }
     } catch { /* thumbnail is cosmetic */ }
     finally { thumb._rendering = false; }
   }

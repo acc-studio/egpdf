@@ -471,6 +471,16 @@ export async function maybeRunAutotest(ctx) {
       // reverts it.
       const ins = await ctx.combine.testInsert([1], 0);
       await sleep(400);
+      ctx.toggleSidebar(true);
+      await sleep(350);
+      const thumbBoxes = [...document.querySelectorAll('#sidebar .thumb-canvas-box')];
+      const hasUndefinedText = thumbBoxes.some((b) => b.textContent?.includes('undefined'));
+      const allRendered = thumbBoxes.length === ctx.getActive().pdf.numPages && thumbBoxes.every((b) => b.querySelector('canvas'));
+      results.combine.insertSidebar = {
+        hasUndefinedText,
+        allRendered,
+        count: thumbBoxes.length,
+      };
       results.combine.insert = ins && {
         grew: ins.after === ins.before + 1,
         sourceUntouched: ins.sourceAfter === ins.sourcePages,

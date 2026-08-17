@@ -303,8 +303,10 @@ export class SplitPdf {
       }).promise;
 
       if (this.gen !== gen || !this.isOpen() || this.tab !== tab) return;
-      card.querySelector('.split-card-canvas-box').replaceChildren(canvas);
-      card._rendered = true;
+      if (canvas) {
+        card.querySelector('.split-card-canvas-box').replaceChildren(canvas);
+        card._rendered = true;
+      }
     } catch { /* cosmetic preview */ }
     finally { card._rendering = false; }
   }
