@@ -1,4 +1,4 @@
-﻿// End-to-end self-test, active only with --autotest=<outputDir>.
+// End-to-end self-test, active only with --autotest=<outputDir>.
 // Exercises: edit tools model, redaction rasterization, form filling,
 // the full save pipeline, and reopening the saved file.
 import { PDFDocument } from 'pdf-lib';
@@ -243,6 +243,8 @@ export async function maybeRunAutotest(ctx) {
       page1HasAardvark: (await t2.pdf.getPage(1).then((p) => p.getTextContent()))
         .items.map((i) => i.str).join(' ').includes('aardvark'),
       historyDepth: t2.history.length,
+      organizerThumbsCount: ctx.organizer.getThumbsCount(),
+      organizerPages: ctx.organizer.getThumbPages(),
     };
     await window.native.testCapture(out('t7-organizer.png'));
 
@@ -479,6 +481,28 @@ export async function maybeRunAutotest(ctx) {
       await sleep(500);
       results.combine.undoRestored = ctx.getActive().pdf.numPages === afterInsert - 1;
     }
+
+    // 13) Split PDF / extract pages
+    const preSplitActive = ctx.getActive();
+    ctx.split.open();
+    await sleep(250);
+    const splitOpened = ctx.split.isOpen();
+    ctx.split.selectAll();
+    const allSelected = ctx.split.getSelectedCount() === preSplitActive.pdf.numPages;
+    ctx.split.selectRange('1, 2');
+    const rangeSelected = ctx.split.getSelectedCount() === 2;
+    await window.native.testCapture(out('t13-split.png'));
+    await ctx.split.extractToTab();
+    await sleep(600);
+    const extractedTab = ctx.getActive();
+    await waitFor(() => extractedTab?.view?.holders[0]?._rendered, 'split extracted p1');
+    results.split = {
+      opened: splitOpened,
+      allSelected,
+      rangeSelected,
+      extractedPages: extractedTab?.pdf?.numPages,
+      extractedTitle: extractedTab?.title,
+    };
 
     results.ok = true;
   } catch (e) {

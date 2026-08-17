@@ -107,7 +107,7 @@ const checks = [
   ['multiline DA fixed in file', r.notesAnnot?.fs === 11],
   ['search finds 3 hits on page 3', r.search?.matches === 3 && r.search?.firstPage === 3],
   ['compare finds the difference', r.compare?.hunks >= 1 && r.compare?.tooDifferent === false],
-  ['page delete', r.structural?.numPages === 2],
+  ['page delete', r.structural?.numPages === 2 && r.structural?.organizerThumbsCount === 2],
   ['page rotate 90°', r.structural?.page1Rotate === 90],
   ['page reorder', r.structural?.page1HasAardvark === true],
   ['structural undo history kept', r.structural?.historyDepth === 3],
@@ -159,6 +159,10 @@ const checks = [
   ['combine: drop copies a page in, leaves the source untouched',
     r.combine?.insert?.grew === true && r.combine?.insert?.sourceUntouched === true],
   ['combine: Ctrl+Z undoes a combine', r.combine?.undoRestored === true],
+  ['split: overlay opens and selects page range',
+    r.split?.opened === true && r.split?.allSelected === true && r.split?.rangeSelected === true],
+  ['split: extracted pages open as new document',
+    r.split?.extractedPages === 2 && typeof r.split?.extractedTitle === 'string'],
 ];
 
 console.log('');

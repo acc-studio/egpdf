@@ -147,6 +147,9 @@ export async function reorderPages(bytes, from, to) {
   const out = await doc.save({ updateFieldAppearances: false });
   return {
     bytes: out,
+    op: 'reorder',
+    from,
+    to,
     map: (p) => {
       const i = p - 1;
       if (i === from) return to + 1;
@@ -163,7 +166,7 @@ export async function rotatePage(bytes, index) {
   const cur = page.getRotation().angle || 0;
   page.setRotation(degrees(((cur + 90) % 360 + 360) % 360));
   const out = await doc.save({ updateFieldAppearances: false });
-  return { bytes: out, map: (p) => p };
+  return { bytes: out, map: (p) => p, op: 'rotate', index };
 }
 
 export async function rotateAllPages(bytes) {
@@ -173,7 +176,7 @@ export async function rotateAllPages(bytes) {
     page.setRotation(degrees(((cur + 90) % 360 + 360) % 360));
   }
   const out = await doc.save({ updateFieldAppearances: false });
-  return { bytes: out, map: (p) => p };
+  return { bytes: out, map: (p) => p, op: 'rotateAll' };
 }
 
 // Copy pages from another document into this one (0-based `atIndex`). Powers
@@ -186,7 +189,7 @@ export async function insertPagesFrom(targetBytes, sourceBytes, sourceIndices, a
   const idx = [...new Set(sourceIndices)]
     .filter((i) => Number.isInteger(i) && i >= 0 && i < source.getPageCount())
     .sort((a, b) => a - b);
-  if (!idx.length) return { bytes: targetBytes, map: (p) => p };
+  if (!idx.length) return { bytes: targetBytes, map: (p) => p, op: 'insert' };
   const at = Math.max(0, Math.min(atIndex | 0, target.getPageCount()));
   const copied = await target.copyPages(source, idx);
   copied.forEach((pg, k) => target.insertPage(at + k, pg));
@@ -196,6 +199,7 @@ export async function insertPagesFrom(targetBytes, sourceBytes, sourceIndices, a
     // existing overlay edits on the target keep their page unless they sit at
     // or after the insertion point, where they shift down by the copied count.
     bytes: out,
+    op: 'insert',
     map: (p) => (p - 1 >= at ? p + count : p),
   };
 }
@@ -208,12 +212,26 @@ export async function deletePage(bytes, index) {
   const out = await doc.save({ updateFieldAppearances: false });
   return {
     bytes: out,
+    op: 'delete',
+    index,
     map: (p) => {
       const i = p - 1;
       if (i === index) return null;
       return i > index ? p - 1 : p;
     },
   };
+}
+
+export async function extractPages(sourceBytes, sourceIndices) {
+  const source = await PDFDocument.load(sourceBytes, { ignoreEncryption: true });
+  const idx = [...new Set(sourceIndices)]
+    .filter((i) => Number.isInteger(i) && i >= 0 && i < source.getPageCount())
+    .sort((a, b) => a - b);
+  if (!idx.length) throw new Error('No valid pages selected for extraction');
+  const target = await PDFDocument.create();
+  const copied = await target.copyPages(source, idx);
+  copied.forEach((pg) => target.addPage(pg));
+  return await target.save({ updateFieldAppearances: false });
 }
 
 /**

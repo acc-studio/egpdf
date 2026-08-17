@@ -13,7 +13,7 @@ export class Organizer {
     this.observer = null;
     this.dragFrom = null;
     // thumbnail bitmaps per document (keyed by page inside) — kept across tab
-    // switches, dropped automatically when a pdf is destroyed/reloaded
+    // switches, retained across structural ops
     this.caches = new WeakMap();
     this.cache = new Map();
     this.cachePdf = null;
@@ -21,22 +21,42 @@ export class Organizer {
     this.gen = 0;
   }
 
+  getStore(tab) {
+    if (!tab) return { cache: new Map(), pending: new Map() };
+    if (!tab._thumbStore) {
+      tab._thumbStore = this.caches.get(tab.pdf) || { cache: new Map(), pending: new Map() };
+    }
+    this.caches.set(tab.pdf, tab._thumbStore);
+    return tab._thumbStore;
+  }
+
   async show(tab) {
+    if (!tab) {
+      this.tab = null;
+      this.cachePdf = null;
+      this.el.replaceChildren();
+      this.observer?.disconnect();
+      return;
+    }
+
+    const sameTab = this.tab === tab;
+    const samePdf = this.cachePdf === tab.pdf;
     this.tab = tab;
+
+    const store = this.getStore(tab);
+    this.cache = store.cache;
+    this.pending = store.pending;
+    this.cachePdf = tab.pdf;
+
+    // If already showing this tab with matching thumbs count, just keep DOM
+    if (sameTab && samePdf && this.el.children.length === tab.pdf.numPages) {
+      return;
+    }
+
     this.el.replaceChildren();
     this.observer?.disconnect();
     this.gen++;
-    if (!tab) return;
-    if (this.cachePdf !== tab.pdf) {
-      this.cachePdf = tab.pdf;
-      let store = this.caches.get(tab.pdf);
-      if (!store) {
-        store = { cache: new Map(), pending: new Map() };
-        this.caches.set(tab.pdf, store);
-      }
-      this.cache = store.cache;
-      this.pending = store.pending;
-    }
+
     this.observer = new IntersectionObserver((entries) => {
       for (const en of entries) {
         if (en.isIntersecting) this.renderThumb(en.target);
@@ -44,70 +64,170 @@ export class Organizer {
     }, { root: this.el, rootMargin: '400px 0px' });
 
     for (let n = 1; n <= tab.pdf.numPages; n++) {
-      const thumb = document.createElement('div');
-      thumb.className = 'thumb';
-      thumb.dataset.page = n;
-      thumb.draggable = true;
-      thumb.innerHTML = `
-        <div class="thumb-canvas-box"></div>
-        <div class="thumb-actions">
-          <button class="th-rotate" title="Rotate 90°">${ICONS.rotate}</button>
-          <button class="th-ocr" title="OCR this page — make its text searchable">${ICONS.ocr}</button>
-          <button class="th-delete" title="Delete page">${ICONS.trash}</button>
-        </div>
-        <div class="thumb-num">${n}</div>`;
-      thumb.addEventListener('click', (e) => {
-        if (e.target.closest('button')) return;
-        this.opts.onSelect(n);
-      });
-      thumb.querySelector('.th-rotate').addEventListener('click', () => this.opts.onRotate(n));
-      thumb.querySelector('.th-ocr').addEventListener('click', () => this.opts.onOcr(n));
-      thumb.querySelector('.th-delete').addEventListener('click', () => this.opts.onDelete(n));
-
-      thumb.addEventListener('dragstart', (e) => {
-        this.dragFrom = n - 1;
-        thumb.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', String(n));
-      });
-      thumb.addEventListener('dragend', () => {
-        thumb.classList.remove('dragging');
-        this.clearDragMarkers();
-        this.dragFrom = null;
-      });
-      thumb.addEventListener('dragover', (e) => {
-        if (this.dragFrom === null) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        this.clearDragMarkers();
-        const rect = thumb.getBoundingClientRect();
-        const before = e.clientY < rect.top + rect.height / 2;
-        thumb.classList.add(before ? 'drag-over-before' : 'drag-over-after');
-      });
-      thumb.addEventListener('drop', (e) => {
-        if (this.dragFrom === null) return;
-        e.preventDefault();
-        const rect = thumb.getBoundingClientRect();
-        const before = e.clientY < rect.top + rect.height / 2;
-        let to = (n - 1) + (before ? 0 : 1);
-        const from = this.dragFrom;
-        this.clearDragMarkers();
-        this.dragFrom = null;
-        if (to > from) to--;
-        if (to !== from) this.opts.onReorder(from, to);
-      });
-
-      // Cached bitmap → show it immediately, no render round-trip.
-      const cached = this.cache.get(n);
-      if (cached) {
-        thumb.querySelector('.thumb-canvas-box').replaceChildren(cached);
-        thumb._rendered = true;
-      }
-
+      const thumb = this.buildThumb(n);
       this.el.appendChild(thumb);
       this.observer.observe(thumb);
     }
     this.prefetch(this.gen);
+  }
+
+  buildThumb(n) {
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb';
+    thumb.dataset.page = n;
+    thumb.draggable = true;
+    thumb.innerHTML = `
+      <div class="thumb-canvas-box"></div>
+      <div class="thumb-actions">
+        <button class="th-rotate" title="Rotate 90°">${ICONS.rotate}</button>
+        <button class="th-ocr" title="OCR this page — make its text searchable">${ICONS.ocr}</button>
+        <button class="th-delete" title="Delete page">${ICONS.trash}</button>
+      </div>
+      <div class="thumb-num">${n}</div>`;
+
+    thumb.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      this.opts.onSelect(+thumb.dataset.page);
+    });
+    thumb.querySelector('.th-rotate').addEventListener('click', () => this.opts.onRotate(+thumb.dataset.page));
+    thumb.querySelector('.th-ocr').addEventListener('click', () => this.opts.onOcr(+thumb.dataset.page));
+    thumb.querySelector('.th-delete').addEventListener('click', () => this.opts.onDelete(+thumb.dataset.page));
+
+    thumb.addEventListener('dragstart', (e) => {
+      const p = +thumb.dataset.page;
+      this.dragFrom = p - 1;
+      thumb.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(p));
+    });
+    thumb.addEventListener('dragend', () => {
+      thumb.classList.remove('dragging');
+      this.clearDragMarkers();
+      this.dragFrom = null;
+    });
+    thumb.addEventListener('dragover', (e) => {
+      if (this.dragFrom === null) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      this.clearDragMarkers();
+      const rect = thumb.getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+      thumb.classList.add(before ? 'drag-over-before' : 'drag-over-after');
+    });
+    thumb.addEventListener('drop', (e) => {
+      if (this.dragFrom === null) return;
+      e.preventDefault();
+      const p = +thumb.dataset.page;
+      const rect = thumb.getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+      let to = (p - 1) + (before ? 0 : 1);
+      const from = this.dragFrom;
+      this.clearDragMarkers();
+      this.dragFrom = null;
+      if (to > from) to--;
+      if (to !== from) this.opts.onReorder(from, to);
+    });
+
+    // Cached bitmap → show it immediately, no render round-trip.
+    const cached = this.cache.get(n);
+    if (cached) {
+      thumb.querySelector('.thumb-canvas-box').replaceChildren(cached);
+      thumb._rendered = true;
+    }
+
+    return thumb;
+  }
+
+  // Fast incremental deletion: removes target thumbnail DOM element, renumbers
+  // remaining thumbnails and remaps cached canvases without reloading sidebar.
+  deleteThumb(n, newPdf) {
+    const thumb = this.el.querySelector(`.thumb[data-page="${n}"]`);
+    if (thumb) {
+      this.observer?.unobserve(thumb);
+      thumb.remove();
+    }
+    // Renumber subsequent thumbnails in DOM
+    const thumbs = this.el.querySelectorAll('.thumb');
+    for (const t of thumbs) {
+      const cur = +t.dataset.page;
+      if (cur > n) {
+        const next = cur - 1;
+        t.dataset.page = next;
+        const numEl = t.querySelector('.thumb-num');
+        if (numEl) numEl.textContent = next;
+      }
+    }
+    // Remap cache entries
+    const nextCache = new Map();
+    for (const [p, canvas] of this.cache) {
+      if (p < n) nextCache.set(p, canvas);
+      else if (p > n) nextCache.set(p - 1, canvas);
+    }
+    this.cache = nextCache;
+    this.pending.clear();
+    if (this.tab) {
+      const store = this.getStore(this.tab);
+      store.cache = this.cache;
+      store.pending = this.pending;
+      this.tab.pdf = newPdf;
+      this.caches.set(newPdf, store);
+      this.cachePdf = newPdf;
+    }
+  }
+
+  // Fast incremental rotation: invalidates and re-renders only page n's thumbnail
+  rotateThumb(n, newPdf) {
+    this.cache.delete(n);
+    if (this.tab) {
+      const store = this.getStore(this.tab);
+      store.cache = this.cache;
+      this.tab.pdf = newPdf;
+      this.caches.set(newPdf, store);
+      this.cachePdf = newPdf;
+    }
+    const thumb = this.el.querySelector(`.thumb[data-page="${n}"]`);
+    if (thumb) {
+      thumb._rendered = false;
+      thumb.querySelector('.thumb-canvas-box').replaceChildren();
+      this.renderThumb(thumb);
+    }
+  }
+
+  // Fast incremental reordering: repositions DOM element and remaps cache
+  reorderThumb(from, to, newPdf, map) {
+    const thumbs = [...this.el.querySelectorAll('.thumb')];
+    const moving = thumbs[from];
+    if (moving) {
+      if (to >= thumbs.length - 1) {
+        this.el.appendChild(moving);
+      } else {
+        const target = thumbs[to];
+        this.el.insertBefore(moving, to > from ? target.nextSibling : target);
+      }
+    }
+    // Re-index all thumbnails in DOM order
+    this.el.querySelectorAll('.thumb').forEach((t, i) => {
+      const p = i + 1;
+      t.dataset.page = p;
+      const numEl = t.querySelector('.thumb-num');
+      if (numEl) numEl.textContent = p;
+    });
+    // Remap cache
+    const nextCache = new Map();
+    for (const [p, canvas] of this.cache) {
+      const np = map(p);
+      if (np !== null) nextCache.set(np, canvas);
+    }
+    this.cache = nextCache;
+    this.pending.clear();
+    if (this.tab) {
+      const store = this.getStore(this.tab);
+      store.cache = this.cache;
+      store.pending = this.pending;
+      this.tab.pdf = newPdf;
+      this.caches.set(newPdf, store);
+      this.cachePdf = newPdf;
+    }
   }
 
   // Warm the thumbnail cache in the background so scrolling the panel (and

@@ -8,12 +8,13 @@ import {
 import { ocrArea } from './ocrbox.js';
 import { openPrintPreview, isPrintPreviewOpen } from './print.js';
 import { detectAvailableFonts } from './fonts.js';
-import { buildSavedPdf, reorderPages, rotatePage, rotateAllPages, deletePage, insertPagesFrom } from './save.js';
+import { buildSavedPdf, reorderPages, rotatePage, rotateAllPages, deletePage, insertPagesFrom, extractPages } from './save.js';
 import { ocrRun, scannedPages, pageHasText } from './ocr.js';
 import { Search } from './search.js';
 import { compareDocs } from './compare.js';
 import { Organizer } from './organizer.js';
 import { Combine } from './combine.js';
+import { SplitPdf, parsePageRange } from './split.js';
 import { initUpdates } from './update.js';
 
 const $ = (id) => document.getElementById(id);
@@ -259,13 +260,7 @@ function renderTabBar() {
 
 // ---------------------------------------------------------------- reload / save
 
-async function reloadTab(tab, bytes, opts = {}) {
-  const {
-    filePath = tab.filePath,
-    edits = [],
-    structDirty = false,
-    resetHistory = false,
-  } = opts;
+async function reloadTab(tab, bytes, { filePath = tab.filePath, edits = tab.edits, structDirty = false, resetHistory = false, changeInfo = null } = {}) {
   const scroll = tab.view.el.scrollTop;
   const scale = tab.view.scale;
   const fitMode = tab.view.fitMode;
@@ -293,7 +288,17 @@ async function reloadTab(tab, bytes, opts = {}) {
     tab.view.hide();
   }
   if (tab === active) updateChrome();
-  if (sidebarVisible && tab === active) organizer.show(tab);
+  if (sidebarVisible && tab === active) {
+    if (changeInfo?.op === 'delete') {
+      organizer.deleteThumb(changeInfo.index + 1, tab.pdf);
+    } else if (changeInfo?.op === 'rotate') {
+      organizer.rotateThumb(changeInfo.index + 1, tab.pdf);
+    } else if (changeInfo?.op === 'reorder') {
+      organizer.reorderThumb(changeInfo.from, changeInfo.to, tab.pdf, changeInfo.map);
+    } else {
+      organizer.show(tab);
+    }
+  }
   renderTabBar();
 }
 
@@ -340,7 +345,7 @@ async function structuralOp(tab, opRunner) {
       const np = res.map(e.page);
       if (np !== null) newEdits.push({ ...e, page: np });
     }
-    await reloadTab(tab, res.bytes, { edits: newEdits, structDirty: true });
+    await reloadTab(tab, res.bytes, { edits: newEdits, structDirty: true, changeInfo: res });
     setStatus('');
   } catch (e) {
     console.error(e);
@@ -707,6 +712,7 @@ applyIcons({
   'btn-open': 'open', 'btn-save': 'save', 'btn-saveas': 'saveas', 'btn-print': 'print',
   'btn-zoom-out': 'zoomout', 'btn-zoom-in': 'zoomin', 'btn-fit': 'fit',
   'btn-split': 'split', 'btn-compare': 'compare', 'btn-combine': 'combine',
+  'btn-split-pdf': 'splitPdf',
   'tool-select': 'select', 'tool-redact': 'redact', 'tool-whiteout': 'whiteout',
   'tool-highlight': 'highlight', 'tool-text': 'text', 'tool-image': 'image',
   'tool-note': 'note', 'tool-ocrarea': 'ocrarea',
@@ -736,6 +742,46 @@ $('btn-combine').addEventListener('click', openCombine);
 $('combine-close').addEventListener('click', () => combine.close());
 $('combine-done').addEventListener('click', () => combine.close());
 $('compare-close').addEventListener('click', closeComparePanel);
+
+const splitPdf = new SplitPdf({
+  el: $('split-overlay'),
+  getActiveTab: () => active,
+  onExtractToTab: async (tab, pageNums) => {
+    setStatus('Extracting pages…');
+    try {
+      const baked = await buildSavedPdf(tab);
+      const zeroBased = pageNums.map((n) => n - 1);
+      const bytes = await extractPages(baked, zeroBased);
+      const baseName = (tab.title || 'document').replace(/\.pdf$/i, '');
+      await openBytes(bytes, `${baseName}-extracted.pdf`);
+      setStatus(`Extracted ${pageNums.length} page${pageNums.length === 1 ? '' : 's'} to new tab`);
+    } catch (e) {
+      console.error(e);
+      setStatus(`Extract failed: ${e.message || e}`, true);
+    }
+  },
+  onSaveExtracted: async (tab, pageNums) => {
+    const baseName = (tab.title || 'document').replace(/\.pdf$/i, '');
+    const defaultName = `${baseName}-extracted.pdf`;
+    const target = await native.savePdfDialog(defaultName);
+    if (!target) return;
+    setStatus('Extracting and saving…');
+    try {
+      const baked = await buildSavedPdf(tab);
+      const zeroBased = pageNums.map((n) => n - 1);
+      const bytes = await extractPages(baked, zeroBased);
+      await native.writeFile(target, bytes);
+      await openPaths([target]);
+      setStatus(`Saved ${target}`);
+    } catch (e) {
+      console.error(e);
+      setStatus(`Save failed: ${e.message || e}`, true);
+    }
+  },
+});
+$('btn-split-pdf').addEventListener('click', () => {
+  if (active) splitPdf.open();
+});
 
 const updates = initUpdates({ native, setStatus });
 $('btn-undo').addEventListener('click', undo);
@@ -847,8 +893,12 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (inField) return;
-  // While the combine overlay / About dialog is up, swallow the single-key
+  // While the combine overlay / Split overlay / About dialog is up, swallow the single-key
   // tool shortcuts — only Escape (to close) does anything.
+  if (splitPdf.isOpen()) {
+    if (e.key === 'Escape') splitPdf.close();
+    return;
+  }
   if (combine.isOpen()) {
     if (e.key === 'Escape') combine.close();
     return;
@@ -915,6 +965,11 @@ import('./autotest.js').then((m) =>
     toggleSidebar,
     getPanes: () => paneTabs,
     getFonts: () => availableFonts,
+    organizer: {
+      getThumbsCount: () => document.querySelectorAll('#sidebar .thumb').length,
+      getRenderedThumbsCount: () => document.querySelectorAll('#sidebar .thumb-canvas-box canvas').length,
+      getThumbPages: () => [...document.querySelectorAll('#sidebar .thumb')].map((t) => +t.dataset.page),
+    },
     combine: {
       open: () => openCombine(),
       close: () => combine.close(),
@@ -933,6 +988,24 @@ import('./autotest.js').then((m) =>
         await combineInsert(target, source, pages, at);
         return { before, after: target.pdf.numPages, sourcePages, sourceAfter: source.pdf.numPages };
       },
+    },
+    split: {
+      open: () => splitPdf.open(),
+      close: () => splitPdf.close(),
+      isOpen: () => splitPdf.isOpen(),
+      selectAll: () => splitPdf.selectAll(),
+      clearAll: () => splitPdf.clearAll(),
+      selectPattern: (pred) => splitPdf.selectPattern(pred),
+      selectRange: (rangeStr) => {
+        if (!active) return;
+        const pages = parsePageRange(rangeStr, active.pdf.numPages);
+        splitPdf.selectedPages = new Set(pages);
+        splitPdf.syncSelection();
+      },
+      getSelectedCount: () => splitPdf.selectedPages.size,
+      getSelectedPages: () => [...splitPdf.selectedPages].sort((a, b) => a - b),
+      extractToTab: () => splitPdf.doExtract(false),
+      saveAs: () => splitPdf.doExtract(true),
     },
     ops: {
       rotate: (n) => structuralOp(active, (b) => rotatePage(b, n - 1)),
