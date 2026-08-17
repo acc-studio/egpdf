@@ -1015,17 +1015,23 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === 'i') startImageTool();
 });
 
-// Save reminder when quitting or reloading with unsaved changes
+// Helper for native window close check
+window.getDirtyTabInfo = () => {
+  const dirty = tabs.filter(isDirty);
+  return {
+    count: dirty.length,
+    title: dirty[0]?.title || '',
+  };
+};
+
+// Save reminder when quitting or reloading in web browser mode
 window.addEventListener('beforeunload', (e) => {
-  if (window.testMode) return;
+  if (window.testMode || window.native?.setTitle) return;
   const dirty = tabs.filter(isDirty);
   if (dirty.length > 0) {
-    const msg = dirty.length === 1
-      ? `"${dirty[0].title}" has unsaved changes. Are you sure you want to quit?`
-      : `You have ${dirty.length} documents with unsaved changes. Are you sure you want to quit?`;
     e.preventDefault();
-    e.returnValue = msg;
-    return msg;
+    e.returnValue = '';
+    return '';
   }
 });
 

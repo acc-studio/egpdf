@@ -251,6 +251,36 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  let forceQuit = false;
+  mainWindow.on('close', async (e) => {
+    if (TEST_MODE || forceQuit) return;
+    e.preventDefault();
+    try {
+      const info = await mainWindow.webContents.executeJavaScript(
+        'typeof window.getDirtyTabInfo === "function" ? window.getDirtyTabInfo() : null'
+      );
+      if (info && info.count > 0) {
+        const msg = info.count === 1
+          ? `"${info.title}" has unsaved changes. Close anyway?`
+          : `You have ${info.count} documents with unsaved changes. Close anyway?`;
+        const choice = dialog.showMessageBoxSync(mainWindow, {
+          type: 'warning',
+          buttons: ['Close Anyway', 'Cancel'],
+          defaultId: 1,
+          cancelId: 1,
+          title: 'Unsaved Changes',
+          message: msg,
+          detail: 'Your changes will be lost if you close without saving.',
+        });
+        if (choice !== 0) return;
+      }
+    } catch { /* proceed to close if renderer is unavailable */ }
+    forceQuit = true;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.destroy();
+    }
+  });
+
   mainWindow.webContents.on('did-finish-load', () => {
     const paths = pendingPaths.length ? pendingPaths : collectPdfArgs(process.argv.slice(1));
     if (paths.length) mainWindow.webContents.send('open-paths', paths);
