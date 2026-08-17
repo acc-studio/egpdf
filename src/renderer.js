@@ -125,10 +125,12 @@ function updateChrome() {
   if (sidebarVisible && organizer.tab !== active) organizer.show(active);
 }
 
-function toggleSplit() {
-  split = !split;
+function toggleSplit(forceState = null) {
+  split = forceState !== null ? forceState : !split;
   document.body.classList.toggle('split', split);
   paneEls[1].classList.toggle('hidden', !split);
+  $('btn-split')?.classList.toggle('active', split);
+  if ($('btn-split')) $('btn-split').title = split ? 'Exit split view (Single pane)' : 'Split view — two documents side by side';
   if (split) {
     if (paneTabs[1] === paneTabs[0]) paneTabs[1] = null;
     if (!paneTabs[1]) {
@@ -795,6 +797,15 @@ paneEls.forEach((pane, i) => {
     focusPane(i);
     openDialog();
   });
+  pane.querySelector('.pane-close-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (i === 1) {
+      toggleSplit(false);
+    } else {
+      if (paneTabs[1]) showInPane(paneTabs[1], 0);
+      toggleSplit(false);
+    }
+  });
 });
 
 for (const btn of document.querySelectorAll('.tool')) {
@@ -885,6 +896,7 @@ window.addEventListener('keydown', (e) => {
     else if (e.key === '=' || e.key === '+') { e.preventDefault(); zoomBy(1.15); }
     else if (e.key === '-') { e.preventDefault(); zoomBy(1 / 1.15); }
     else if (e.key === '0') { e.preventDefault(); if (active) { active.view.setZoom(1); updateZoomLabel(); } }
+    else if (e.key === '\\') { e.preventDefault(); toggleSplit(); }
     else if (e.key === 'Tab' && tabs.length > 1) {
       e.preventDefault();
       const i = tabs.indexOf(active);
