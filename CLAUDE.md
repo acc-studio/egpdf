@@ -14,6 +14,7 @@ npm run test:packaged  # same suite against a real packaged .exe (electron-build
 npm run dist           # native installer for current platform → release/
 npm run release        # build installer + publish a GitHub Release (replaces CI; see below)
 node build-web.mjs     # static web build → web-dist/ (deployed to egpdf.vercel.app)
+npm run build:extension # build extension viewer bundle → extension/viewer/
 ```
 
 There is no lint/typecheck step and no unit tests. The test suite is one monolithic e2e scenario: `test/run.mjs` builds, generates a fixture (`test/make-sample.mjs`), launches the app with `--autotest=<dir>`, and the app drives itself via `src/autotest.js`, writing `test-results.json` + screenshots to `test/.out/<mode>/`. Individual checks cannot be run in isolation — to add coverage, extend the scenario in `src/autotest.js` and add a matching assertion to the `checks` array in `test/run.mjs`.
@@ -24,6 +25,7 @@ Two build targets share one renderer codebase; the split point is the `window.na
 
 - **Desktop**: `main.js` (Electron main: windows, dialogs, file IO, font path resolution, Tesseract OCR, printers, single-instance lock) + `preload.js` (exposes `window.native` via contextBridge, incl. the OS spellchecker probe) + `index.html` + `dist/renderer.js`.
 - **Web**: `src/web-main.js` installs `src/native-web.js` as `window.native` (File System Access API, bundled Liberation fonts, tesseract.js in a Web Worker), then dynamically imports the same `renderer.js`. `build-web.mjs` assembles the static site and rewrites the CSP in `index.html`. Web has no spellcheck-repair stage (that needs the OS dictionary).
+- **Browser Extension**: `src/ext-main.js` boots the web renderer in `extension/viewer/index.html#<pdf-url>`, fetching the target PDF directly into the in-tab egPDF viewer. `extension/background.js` uses declarativeNetRequest dynamic redirect rules for `*.pdf` URLs, `onHeadersReceived` detection for content-type based PDF links, and `webNavigation.onBeforeNavigate` for local `file:///` PDFs (e.g. from Chrome's download shelf). Desktop app association in Explorer is untouched.
 
 Renderer modules (all bundled by esbuild, pdf.js for viewing / pdf-lib for writing):
 
@@ -37,6 +39,10 @@ Renderer modules (all bundled by esbuild, pdf.js for viewing / pdf-lib for writi
 - `src/search.js`, `src/compare.js` (word-level Myers diff), `src/organizer.js` (thumbnail sidebar), `src/fonts.js`, `src/icons.js`.
 - `src/combine.js` — the Combine overlay: one thumbnail column per open tab, drag pages across documents to copy them in. A drop calls back into the renderer, which runs `insertPagesFrom` (save.js) as a structural op on the *target* tab (so it's undoable and remaps overlay edits); the source is never modified. Copies come from the source's `buildSavedPdf` output, so its edits/redactions come across baked in. Works on both desktop and web.
 - `src/update.js` — desktop self-update UI (banner + About dialog). All network access lives in `main.js`; this module only relays intent over the `window.native.update` bridge. On web `native.update` is null and the update controls hide themselves.
+
+## Browser extension (in-tab viewer)
+
+`extension/` is a standalone MV3 Chrome/Edge extension. When viewing a PDF in the browser (via online links or browser downloads), it displays the document directly in an egPDF browser tab rather than delegating to Chrome's built-in PDF viewer or Acrobat. Opening files from the file manager (Explorer) continues to launch the standalone desktop app as usual. Build the extension bundle with `npm run build:extension`.
 
 ## Self-update & privacy (desktop only)
 

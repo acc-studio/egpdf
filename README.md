@@ -34,6 +34,18 @@ All versions are on the [releases page](https://github.com/acc-studio/egpdf/rele
 
 The full suite also runs in the browser at **https://egpdf.vercel.app** — same viewer, editing tools, and OCR (Turkish, English, German + Arabic, via WebAssembly). It is a static site with no server component: documents are opened with the browser's file APIs and never leave your machine. Differences from the desktop app: fonts come bundled (Liberation family, metric-compatible with Arial/Times/Courier) instead of your system fonts, and printing goes through the browser's print dialog. Build it locally with `node build-web.mjs` → `web-dist/`.
 
+## Browser extension — PDFs open in an egPDF tab (Chrome / Edge)
+
+Chrome and Edge show PDFs in their built-in viewer (or Acrobat's extension, which uses its own tab). The extension in [`extension/`](extension) does the same job with egPDF: PDFs open in a normal browser tab running the egPDF viewer — all the editing tools, OCR and so on — not in the desktop app.
+
+- **PDF links & the address bar** — a link to a PDF opens in an egPDF tab, with no flash of the built-in viewer. This includes PDFs served from URLs that don't end in `.pdf`. Servers that explicitly force a download are left alone.
+- **Chrome's downloads list** — clicking a finished download opens it in an egPDF tab (needs **Allow access to file URLs** on the extension's page; the toolbar popup shows a shortcut).
+- **Explorer / Finder** — unchanged: double-clicking a PDF still opens the desktop app.
+
+Install (until it's on a store): run `npm install && npm run build:extension` once (it copies the web app into `extension/viewer/`), open `chrome://extensions` (or `edge://extensions`), enable **Developer mode**, **Load unpacked**, and pick the `extension` folder. The toolbar popup has an on/off switch.
+
+Everything stays local: the viewer is bundled in the extension, the PDF is fetched straight into the tab, and there is no server. Saving uses the browser's save dialog, like the web version.
+
 ## Viewing
 
 - **Tabs** — open many PDFs (drag & drop anywhere, `Ctrl+O`, middle-click a tab to close, `Ctrl+Tab` to switch).

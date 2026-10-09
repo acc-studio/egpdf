@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>egPDF</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <img src="icons/icon48.png" alt="" width="36" height="36">
+    <div>
+      <h1>egPDF</h1>
+      <p>PDFs open in a tab, right here in your browser</p>
+    </div>
+  </header>
+
+  <label class="row" for="intercept">
+    <span class="text">
+      <strong>Open PDFs with egPDF</strong>
+      <small>PDF links and downloads use egPDF instead of the built-in viewer</small>
+    </span>
+    <input type="checkbox" id="intercept" role="switch">
+    <span class="switch" aria-hidden="true"></span>
+  </label>
+
+  <div id="fileAccess" class="notice" hidden>
+    <p>To also open PDFs from your disk (e.g. clicking a finished download),
+       turn on <strong>Allow access to file URLs</strong> for this extension.</p>
+    <button id="openSettings" type="button">Open extension settings</button>
+  </div>
+
+  <footer>100% local — nothing leaves your computer.</footer>
+  <script src="popup.js"></script>
+</body>
+</html>

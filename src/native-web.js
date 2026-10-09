@@ -64,14 +64,17 @@ function pickViaInput({ multiple = false, accept = '' } = {}) {
 const PDF_TYPES = [{ description: 'PDF documents', accept: { 'application/pdf': ['.pdf'] } }];
 
 // ---- OCR (tesseract.js in a Web Worker, models served as static assets) -----
+// Absolute URL of a bundled asset, relative to the page that hosts the app
+// (website root, or the extension's viewer/ folder).
+const assetUrl = (p) => new URL(p, document.baseURI).href;
 let ocrWorkerPromise = null;
 let lastPsm = null;
 function getOcrWorker() {
   if (!ocrWorkerPromise) {
     ocrWorkerPromise = createWorker(['tur', 'eng', 'ara', 'deu'], OEM.LSTM_ONLY, {
-      workerPath: '/tess/worker.min.js',
-      corePath: '/tess/core',
-      langPath: '/tessdata',
+      workerPath: assetUrl('tess/worker.min.js'),
+      corePath: assetUrl('tess/core'),
+      langPath: assetUrl('tessdata'),
       gzip: false,
       cacheMethod: 'none',
       workerBlobURL: false,

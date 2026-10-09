@@ -5,4 +5,5 @@ web-dist/
 test/.out/
 docs/
 build/
+extension/
 *.pdf

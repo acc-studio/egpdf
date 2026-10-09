@@ -1,6 +1,9 @@
 node_modules/
+extension/viewer/
 dist/
 release/
 test/.out/
 web-dist/
 .vercel
+*.crx
+*.pem

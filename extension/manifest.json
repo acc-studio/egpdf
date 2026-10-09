@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "egPDF",
+  "version": "1.0.0",
+  "description": "Opens PDFs in a browser tab with egPDF — view, annotate, redact, OCR and more — instead of the built-in viewer. Fully local: your documents never leave your computer.",
+  "minimum_chrome_version": "110",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "egPDF",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage",
+    "webNavigation",
+    "webRequest",
+    "declarativeNetRequest"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "file:///*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["viewer/index.html"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}
