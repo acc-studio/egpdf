@@ -1,9 +1,9 @@
-// Local release pipeline — replaces GitHub Actions (Actions is no longer
-// available on this account). Builds the installer for the CURRENT platform and
+// Local release pipeline. Builds the installer for the CURRENT platform and
 // publishes it to a GitHub Release under a version-independent asset name, so
-// the README's `latest/download` links keep working. Run it on Windows to ship
-// egPDF-Setup.exe; run it on macOS/Linux to add those platforms' assets to the
-// same release.
+// the README's `latest/download` links keep working.
+// Note: GitHub Actions (.github/workflows/ci.yml) also runs on tag push (v*)
+// and automatically builds and attaches Windows (.exe), macOS (.dmg), and
+// Linux (.AppImage) assets to the release.
 //
 //   node scripts/release.mjs               # test → build → tag → publish
 //   node scripts/release.mjs --skip-tests  # skip the e2e suite (faster)
