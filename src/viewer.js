@@ -1,4 +1,4 @@
-﻿import * as pdfjsLib from 'pdfjs-dist';
+import * as pdfjsLib from 'pdfjs-dist';
 import { mountEditLayer, commitActiveTextEdits } from './edits.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = './dist/pdf.worker.min.mjs';
@@ -73,6 +73,7 @@ export class DocView {
     this.onCurrentPage = opts.onCurrentPage || (() => {});
     this.onPageRendered = opts.onPageRendered || (() => {});
     this.onZoom = opts.onZoom || (() => {});
+    this.onScroll = opts.onScroll || (() => {});
     const pref = savedZoomPref();
     if (pref && !pref.fit) {
       this.scale = pref.scale;
@@ -94,6 +95,7 @@ export class DocView {
 
     this.el.addEventListener('scroll', () => {
       this.trackCurrentPage();
+      this.onScroll();
       // IO may be paused while the window is occluded; keep scroll rendering.
       this.renderVisible();
     });
@@ -181,6 +183,7 @@ export class DocView {
     }
     this.el.scrollTop = 0;
     setTimeout(() => this.renderVisible(), 0);
+    this.onScroll();
   }
 
   computeFitScale() {
@@ -250,6 +253,23 @@ export class DocView {
   scrollToPage(n, cssOffsetY = 0) {
     n = Math.min(this.holders.length, Math.max(1, n));
     this.el.scrollTop = this.holders[n - 1].offsetTop - 16 + cssOffsetY;
+  }
+
+  // Step one page down (+1) or up (-1). Stepping up from the middle of a page
+  // first snaps back to that page's top, then moves on to the previous page.
+  stepPage(dir) {
+    const cur = this.currentPageNum;
+    if (dir < 0) {
+      const curTop = this.holders[cur - 1].offsetTop - 16;
+      if (this.el.scrollTop - curTop > 8) { this.scrollToPage(cur); return; }
+    }
+    this.scrollToPage(cur + dir);
+  }
+
+  canStep(dir) {
+    if (!this.holders.length) return false;
+    if (dir > 0) return this.currentPageNum < this.holders.length;
+    return this.currentPageNum > 1 || this.el.scrollTop - (this.holders[0].offsetTop - 16) > 8;
   }
 
   async renderPage(n) {

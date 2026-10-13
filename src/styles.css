@@ -231,6 +231,31 @@ body.split .pane.focused::after {
 }
 .doc-scroll.hidden { display: none; }
 
+/* page up / down buttons, bottom-right of each pane */
+.page-nav {
+  position: absolute; right: 22px; bottom: 18px; z-index: 35;
+  display: flex; flex-direction: column; gap: 1px;
+  border-radius: 10px; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--border);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.22);
+  opacity: 0.8;
+  transition: opacity 0.15s ease, box-shadow 0.15s ease;
+}
+.page-nav:hover { opacity: 1; box-shadow: 0 6px 18px rgba(0,0,0,0.3); }
+.page-nav.hidden { display: none; }
+.page-nav-btn {
+  width: 34px; height: 32px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: transparent; color: var(--text);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, transform 0.08s ease;
+}
+.page-nav-btn + .page-nav-btn { border-top: 1px solid var(--border); }
+.page-nav-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.page-nav-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--accent); }
+.page-nav-btn:active:not(:disabled) { transform: scale(0.92); }
+.page-nav-btn:disabled { opacity: 0.3; cursor: default; }
+
 .page-holder {
   position: relative;
   margin: 0 auto 18px auto;

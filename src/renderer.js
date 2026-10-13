@@ -55,6 +55,7 @@ function makeView(tab, rootEl) {
     },
     onPageRendered: (n, holder) => { if (tab === active) search.onPageRendered(n, holder); },
     onZoom: () => { if (tab === active) updateZoomLabel(); },
+    onScroll: () => updatePageNav(),
   });
 }
 
@@ -107,6 +108,22 @@ function updatePaneUI() {
     ph.classList.toggle('hidden', !relevant || !!paneTabs[i] || tabs.length === 0);
   });
   $('empty-state').classList.toggle('hidden', tabs.length > 0);
+  updatePageNav();
+}
+
+// Page up/down buttons at the bottom-right of each pane: shown only when the
+// pane has a document, with each button disabled at the document's ends.
+function updatePageNav() {
+  paneEls.forEach((pane, i) => {
+    const nav = pane.querySelector('.page-nav');
+    if (!nav) return;
+    const view = paneTabs[i]?.view;
+    const show = !!view && (i === 0 || split) && view.holders.length > 0;
+    nav.classList.toggle('hidden', !show);
+    if (!show) return;
+    nav.querySelector('.page-nav-up').disabled = !view.canStep(-1);
+    nav.querySelector('.page-nav-down').disabled = !view.canStep(1);
+  });
 }
 
 function updateChrome() {
@@ -801,6 +818,12 @@ paneEls.forEach((pane, i) => {
   pane.querySelector('.pane-open-btn').addEventListener('click', () => {
     focusPane(i);
     openDialog();
+  });
+  pane.querySelector('.page-nav-up').addEventListener('click', () => {
+    paneTabs[i]?.view.stepPage(-1);
+  });
+  pane.querySelector('.page-nav-down').addEventListener('click', () => {
+    paneTabs[i]?.view.stepPage(1);
   });
   pane.querySelector('.pane-close-btn')?.addEventListener('click', (e) => {
     e.stopPropagation();
