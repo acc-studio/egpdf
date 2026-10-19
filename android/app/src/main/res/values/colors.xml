@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- match src/styles.css: surface (top bar / system bars) and bg -->
+    <color name="egpdf_surface">#FFFFFF</color>
+    <color name="egpdf_bg">#F4F4F5</color>
+    <color name="colorPrimary">#3B6FF5</color>
+    <color name="colorPrimaryDark">#FFFFFF</color>
+    <color name="colorAccent">#3B6FF5</color>
+</resources>

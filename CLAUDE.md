@@ -15,6 +15,7 @@ npm run dist           # native installer for current platform → release/
 npm run release        # build installer + publish a GitHub Release (replaces CI; see below)
 node build-web.mjs     # static web build → web-dist/ (deployed to egpdf.vercel.app)
 npm run build:extension # build extension viewer bundle → extension/viewer/
+npm run build:android  # Android APK → release/egPDF.apk (scripts/android.mjs; --debug for a debug APK)
 ```
 
 There is no lint/typecheck step and no unit tests. The test suite is one monolithic e2e scenario: `test/run.mjs` builds, generates a fixture (`test/make-sample.mjs`), launches the app with `--autotest=<dir>`, and the app drives itself via `src/autotest.js`, writing `test-results.json` + screenshots to `test/.out/<mode>/`. Individual checks cannot be run in isolation — to add coverage, extend the scenario in `src/autotest.js` and add a matching assertion to the `checks` array in `test/run.mjs`.
@@ -38,7 +39,19 @@ Renderer modules (all bundled by esbuild, pdf.js for viewing / pdf-lib for writi
 - `src/print.js` — renders pages at print DPI **through the save pipeline** (so redactions/forms/edits print exactly as saved), M365-style preview, silent `webContents.print`.
 - `src/search.js`, `src/compare.js` (word-level Myers diff), `src/organizer.js` (thumbnail sidebar), `src/fonts.js`, `src/icons.js`.
 - `src/combine.js` — the Combine overlay: one thumbnail column per open tab, drag pages across documents to copy them in. A drop calls back into the renderer, which runs `insertPagesFrom` (save.js) as a structural op on the *target* tab (so it's undoable and remaps overlay edits); the source is never modified. Copies come from the source's `buildSavedPdf` output, so its edits/redactions come across baked in. Works on both desktop and web.
+- `src/udf.js` — UYAP document (.udf) reader: unzips content.xml (DecompressionStream, no deps) and lays its paragraphs/tables/lists/header/footer/images out into a PDF with pdf-lib + the bundled Liberation faces (`web/fonts`, fetched via the `bundledFont` bridge — IPC on desktop, fetch on web/Android). `openBytes` converts any ZIP-with-content.xml on open; the tab gets `filePath: null` (Save → Save As, the .udf is never overwritten) and `sourcePath` = the original path. Covered by the `udf:` checks (fixture written by `test/make-sample.mjs`).
 - `src/update.js` — desktop self-update UI (banner + About dialog). All network access lives in `main.js`; this module only relays intent over the `window.native.update` bridge. On web `native.update` is null and the update controls hide themselves.
+
+## Android app
+
+`android/` is a Capacitor 8 project wrapping the web renderer; `node build-web.mjs --android` builds its web layer into `android-www/` (the Capacitor webDir), entry `src/android-main.js`.
+
+- `src/native-android.js` — the `window.native` bridge: spreads the web bridge (OCR, fonts, dictionaries stay identical) and replaces file IO, pickers, print, share and the updater with the native `EgPdf` plugin (`android/app/src/main/java/com/azizcancengiz/egpdf/EgPdfPlugin.java`). Files reachable as plain paths are used as tab paths (Save writes back in place); content:// URIs get `egand/<n>/<name>` keys. Reads go through `Capacitor.convertFileSrc` + fetch (no base64); writes go base64 in 3 MB chunks, staged in a temp file and copied over the target only when complete.
+- `src/mobile-ui.js` + `src/mobile.css` — the phone layout over the unchanged desktop renderer: home screen (MediaStore list of every PDF, newest first; needs "All files access"), slim top bar, tools sheet (clicks the hidden desktop toolbar buttons), active-tool pill, status toasts, pinch-zoom (CSS transform during the gesture, one `setZoom` at the end anchored on the page under the fingers), Android back button. Talks to the renderer via `window.egpdfShell`.
+- `src/touch-dnd.js` — long-press → synthetic HTML5 drag events, so the organizer and Combine work by touch.
+- Rendering must stay pdf.js: Android's own PdfRenderer (PDFium) drops Ş/Ğ/İ/ı from UYAP/iText PDFs with non-embedded Times New Roman (it only uses the native renderer for home-screen thumbnails).
+- Version comes from `package.json` (versionCode = major·10000 + minor·100 + patch). Release APKs are signed with the key in `android/keystore.properties` (gitignored; the key lives in `~/.egpdf-signing/`) — every update must use the same key. The updater looks for an `egPDF.apk` asset on the latest GitHub release; releases without one are ignored by Android clients. `npm run release` builds and attaches it automatically when `android/keystore.properties` exists.
+- Launcher icon is a vector adaptive icon (`res/drawable/ic_launcher_foreground.xml` + monochrome variant); legacy PNGs are drawn from the same geometry.
 
 ## Browser extension (in-tab viewer)
 

@@ -62,6 +62,11 @@ function pickViaInput({ multiple = false, accept = '' } = {}) {
 }
 
 const PDF_TYPES = [{ description: 'PDF documents', accept: { 'application/pdf': ['.pdf'] } }];
+// Open also accepts UYAP documents (.udf), laid out into a PDF by udf.js.
+const OPEN_TYPES = [{
+  description: 'PDF and UYAP documents',
+  accept: { 'application/pdf': ['.pdf'], 'application/octet-stream': ['.udf'] },
+}];
 
 // ---- OCR (tesseract.js in a Web Worker, models served as static assets) -----
 // Absolute URL of a bundled asset, relative to the page that hosts the app
@@ -121,11 +126,11 @@ export function createNativeWeb() {
     async openPdfDialog() {
       if (hasFsAccess) {
         try {
-          const handles = await window.showOpenFilePicker({ multiple: true, types: PDF_TYPES });
+          const handles = await window.showOpenFilePicker({ multiple: true, types: OPEN_TYPES });
           return handles.map((h) => register({ name: h.name, fsHandle: h }));
         } catch { return []; } // cancelled
       }
-      const files = await pickViaInput({ multiple: true, accept: '.pdf,application/pdf' });
+      const files = await pickViaInput({ multiple: true, accept: '.pdf,.udf,application/pdf' });
       return files.map((f) => register({ name: f.name, file: f }));
     },
 
@@ -201,6 +206,11 @@ export function createNativeWeb() {
       return FONTS.map((f) => ({ name: f.name, path: 'fonts/' + f.file }));
     },
     async fontPath(name) { return fontFile(name); },
+    async bundledFont(file) {
+      const res = await fetch('fonts/' + String(file).split(/[\\/]/).pop());
+      if (!res.ok) throw new Error(`font ${file}: HTTP ${res.status}`);
+      return await res.arrayBuffer();
+    },
 
     async ocrRecognize(png, mode) {
       const worker = await getOcrWorker();

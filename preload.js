@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('native', {
   existsMany: (paths) => ipcRenderer.invoke('fs:exists-many', paths),
   fontFamilies: () => ipcRenderer.invoke('font:families'),
   fontPath: (name) => ipcRenderer.invoke('font:path', name),
+  bundledFont: (file) => ipcRenderer.invoke('font:bundled', file),
   ocrRecognize: (png, mode) => ipcRenderer.invoke('ocr:recognize', png, mode),
   dictText: (lang) => ipcRenderer.invoke('dict:text', lang),
   // OS spellchecker probe: null when the word is fine (or no dictionary is

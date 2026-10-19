@@ -165,6 +165,10 @@ const checks = [
     r.split?.opened === true && r.split?.allSelected === true && r.split?.rangeSelected === true],
   ['split: extracted pages open as new document',
     r.split?.extractedPages === 2 && typeof r.split?.extractedTitle === 'string'],
+  ['udf: UYAP document opens as a PDF tab with no save-back path',
+    r.udf?.title === 'sample.pdf' && r.udf?.filePath === null && r.udf?.pages === 1],
+  ['udf: Turkish text laid out as real text', r.udf?.turkish === true],
+  ['udf: numbered list and table cells rendered', r.udf?.numbered === true && r.udf?.table === true],
 ];
 
 console.log('');

@@ -16,6 +16,7 @@ import { Organizer } from './organizer.js';
 import { Combine } from './combine.js';
 import { SplitPdf, parsePageRange } from './split.js';
 import { initUpdates } from './update.js';
+import { isUdf, udfToPdf } from './udf.js';
 
 const $ = (id) => document.getElementById(id);
 const native = window.native;
@@ -182,7 +183,24 @@ function isDirty(tab) {
 }
 
 async function openBytes(bytes, name, filePath = null) {
-  const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  let data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  // UYAP documents (.udf) are laid out into a PDF on open. The tab has no
+  // file path, so Save asks where to put the PDF — the .udf is never overwritten.
+  let sourcePath = filePath;
+  let fromUdf = false;
+  if (isUdf(data)) {
+    try {
+      setStatus(`Reading UYAP document ${name}…`);
+      data = await udfToPdf(data, (file) => native.bundledFont(file));
+    } catch (e) {
+      console.error(e);
+      setStatus(`Could not read ${name}: ${e.message || e}`, true);
+      return;
+    }
+    name = name.replace(/\.udf$/i, '') + '.pdf';
+    filePath = null;
+    fromUdf = true;
+  }
   let pdf;
   try {
     pdf = await loadPdf(data);
@@ -194,6 +212,7 @@ async function openBytes(bytes, name, filePath = null) {
     id: tabSeq++,
     title: name,
     filePath,
+    sourcePath, // where it was opened from (differs from filePath for a .udf)
     origBytes: data,
     pdf,
     edits: [],
@@ -209,6 +228,7 @@ async function openBytes(bytes, name, filePath = null) {
   await tab.view.init();
   tabs.push(tab);
   activateTab(tab);
+  if (fromUdf) setStatus(`${name.replace(/\.pdf$/i, '.udf')}: UYAP document, shown as PDF. Save creates a PDF copy.`);
 }
 
 function hookStorage(tab) {
@@ -230,7 +250,7 @@ async function openPaths(paths) {
 }
 
 function closeTab(tab) {
-  if (isDirty(tab) && !confirm(`"${tab.title}" has unsaved changes. Close anyway?`)) return;
+  if (isDirty(tab) && !confirm(`"${tab.title}" has unsaved changes. Close anyway?`)) return false;
   tabs.splice(tabs.indexOf(tab), 1);
   for (let i = 0; i < 2; i++) if (paneTabs[i] === tab) paneTabs[i] = null;
   tab.view.destroy();
@@ -241,7 +261,7 @@ function closeTab(tab) {
     updateChrome();
     renderTabBar();
     updatePaneUI();
-    return;
+    return true;
   }
   if (!paneTabs[0]) {
     const repl = tabs.find((t) => t !== paneTabs[1]);
@@ -255,9 +275,15 @@ function closeTab(tab) {
   updateChrome();
   renderTabBar();
   updatePaneUI();
+  return true;
 }
 
+// Listeners for any change to the open documents (opened, closed, switched,
+// edited, saved) — the phone layout (mobile-ui.js) follows along through these.
+const shellListeners = [];
+
 function renderTabBar() {
+  for (const cb of shellListeners) cb();
   const box = $('tabs');
   box.replaceChildren();
   for (const tab of tabs) {
@@ -340,7 +366,8 @@ async function saveActive(saveAs = false) {
   try {
     const bytes = await buildSavedPdf(tab);
     await native.writeFile(target, bytes);
-    await reloadTab(tab, bytes, { filePath: target, resetHistory: true });
+    // the edits are now baked into the saved bytes — drop the overlays
+    await reloadTab(tab, bytes, { filePath: target, edits: [], resetHistory: true });
     setStatus(`Saved  ${target}`);
   } catch (e) {
     console.error(e);
@@ -1070,7 +1097,7 @@ window.addEventListener('drop', async (e) => {
   e.preventDefault();
   document.body.classList.remove('dragging');
   for (const file of e.dataTransfer.files) {
-    if (!/\.pdf$/i.test(file.name)) continue;
+    if (!/\.(pdf|udf)$/i.test(file.name)) continue;
     const path = native.pathForFile(file);
     const buf = await file.arrayBuffer();
     await openBytes(new Uint8Array(buf), file.name, path || null);
@@ -1085,6 +1112,39 @@ native.testConfig?.().then((cfg) => { if (cfg) window.testMode = true; });
 // Programmatic open hook — used by the web build's smoke test and available
 // to anything embedding the app.
 window.egpdfOpenBytes = (bytes, name) => openBytes(bytes, name);
+
+// Shell hooks for the phone layout (mobile-ui.js): it renders its own chrome
+// around the same tabs, panes and tools.
+window.egpdfShell = {
+  getTabs: () => tabs,
+  getActive: () => active,
+  activateTab,
+  closeTab,
+  isDirty,
+  openPaths,
+  save: () => saveActive(false),
+  savedBytes: (tab) => buildSavedPdf(tab),
+  undo,
+  setStatus,
+  toggleSearch,
+  isSplit: () => split,
+  toggleSplit,
+  isSidebarVisible: () => sidebarVisible,
+  toggleSidebar,
+  closeOverlays: () => {
+    if (splitPdf.isOpen()) { splitPdf.close(); return true; }
+    if (combine.isOpen()) { combine.close(); return true; }
+    if (isPrintPreviewOpen()) { $('print-close').click(); return true; }
+    if (updates.isAboutOpen()) { updates.closeAbout(); return true; }
+    if (!$('ocr-popup').classList.contains('hidden')) { closeOcrPopup(); return true; }
+    if (!$('compare-panel').classList.contains('hidden')) { closeComparePanel(); return true; }
+    if (!$('searchbar').classList.contains('hidden')) { toggleSearch(false); return true; }
+    if (editState.tool !== 'select') { setTool('select'); return true; }
+    return false;
+  },
+  openAbout: () => updates.openAbout(),
+  onChange: (cb) => shellListeners.push(cb),
+};
 
 updateZoomLabel();
 setTool('select');

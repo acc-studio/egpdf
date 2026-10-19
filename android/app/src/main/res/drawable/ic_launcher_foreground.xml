@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- egPDF mark: a flat page with a folded corner and four text lines, sized
+     inside the adaptive-icon safe zone (66dp circle of the 108dp canvas). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- page -->
+    <path android:fillColor="#FBF8F1" android:strokeColor="#E3DCCB" android:strokeWidth="0.8"
+        android:pathData="M41,34.5a2.5,2.5 0 0 1 2.5,-2.5H61L69,40V73.5a2.5,2.5 0 0 1 -2.5,2.5H43.5a2.5,2.5 0 0 1 -2.5,-2.5Z" />
+    <!-- folded corner -->
+    <path android:fillColor="#E2A229"
+        android:pathData="M61,32V37.5a2.5,2.5 0 0 0 2.5,2.5H69Z" />
+    <!-- text lines -->
+    <path android:strokeColor="#3B3A36" android:strokeWidth="2" android:strokeLineCap="round"
+        android:pathData="M46,47H55M46,59H63" />
+    <path android:strokeColor="#CC2229" android:strokeWidth="2" android:strokeLineCap="round"
+        android:pathData="M46,53H64" />
+    <path android:strokeColor="#14706D" android:strokeWidth="2" android:strokeLineCap="round"
+        android:pathData="M46,65H57" />
+</vector>

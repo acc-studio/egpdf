@@ -2,7 +2,7 @@
 
 <h1 align="center">egPDF</h1>
 
-<p align="center">Minimal, fully local desktop PDF reader &amp; editor for Windows, macOS, and Linux.<br>
+<p align="center">Minimal, fully local PDF reader &amp; editor for Windows, macOS, Linux, and Android.<br>
 No network access, no accounts, no telemetry — your files never leave your machine.</p>
 
 <p align="center">
@@ -17,6 +17,7 @@ All versions are on the [releases page](https://github.com/acc-studio/egpdf/rele
 - **Windows** — [⬇ egPDF-Setup.exe](https://github.com/acc-studio/egpdf/releases/latest/download/egPDF-Setup.exe) (one-click installer, per-user, no admin rights)
 - **macOS** — [⬇ egPDF.dmg](https://github.com/acc-studio/egpdf/releases/latest/download/egPDF.dmg)
 - **Linux** — [⬇ egPDF.AppImage](https://github.com/acc-studio/egpdf/releases/latest/download/egPDF.AppImage)
+- **Android** — [⬇ egPDF.apk](https://github.com/acc-studio/egpdf/releases/latest/download/egPDF.apk) (Android 7+; allow installing from your browser or file manager when asked)
 
 > The Windows installer is not code-signed, so SmartScreen may warn — choose
 > **More info → Run anyway**, or build from source below. macOS/Linux builds are
@@ -33,6 +34,22 @@ All versions are on the [releases page](https://github.com/acc-studio/egpdf/rele
 ## Web version
 
 The full suite also runs in the browser at **https://egpdf.vercel.app** — same viewer, editing tools, and OCR (Turkish, English, German + Arabic, via WebAssembly). It is a static site with no server component: documents are opened with the browser's file APIs and never leave your machine. Differences from the desktop app: fonts come bundled (Liberation family, metric-compatible with Arial/Times/Courier) instead of your system fonts, and printing goes through the browser's print dialog. Build it locally with `node build-web.mjs` → `web-dist/`.
+
+## Android app
+
+The same egPDF on a phone — every desktop feature (markup, redaction, forms, OCR, combine, compare, extract, print), wrapped in a simple touch layout:
+
+- **Home** lists every PDF and UYAP document on the phone, newest first — whatever just arrived from WhatsApp, mail or a download is on top. Search by name. Needs **All files access** (asked on first launch); without it, use the folder button to pick files.
+- **Open with / Share → egPDF** from WhatsApp, Gmail, Files and the like.
+- **Reading** gets the whole screen: a slim top bar (home · title · page · search · tools), pinch to zoom, back button to return home. All tools live in one sheet; while one is active, a small bar at the bottom says what to do, with Undo and Done.
+- Pages render with egPDF's own engine and bundled fonts — court PDFs that use non-embedded Times New Roman (UYAP / iText output) keep their Ş, Ğ, İ and ı, where Android's built-in renderer shows blanks.
+- Updates itself from GitHub releases, like the desktop app. Files never leave the phone.
+
+Build: `npm run build:android` → `release/egPDF.apk` (needs JDK 21 + Android SDK 36; see `scripts/android.mjs`).
+
+## UYAP documents (.udf)
+
+egPDF opens UYAP editor documents (`.udf`) on desktop, web, and Android — by double-click, Open, drag & drop, or from the phone's file list. The document is laid out into a PDF on the fly (paragraph alignment and indents, bold/italic/underline, tables, numbered lists, tabs, header/footer with page numbers, embedded images) with real, searchable Turkish text, so every tool works on it. The `.udf` itself is never modified: Save creates a PDF copy. The e-signature (`sign.sgn`) is not verified.
 
 ## Browser extension — PDFs open in an egPDF tab (Chrome / Edge)
 
@@ -104,7 +121,10 @@ Bump `version` in `package.json`, then run this on the platform you want to ship
 (Windows for `egPDF-Setup.exe`). It runs the test suite, builds the installer,
 tags `v<version>`, and publishes a GitHub Release with the installer attached
 under a version-independent name (so the download links above always point at
-the newest build). Needs the [GitHub CLI](https://cli.github.com/)
+the newest build). When the Android signing key is set up
+(`android/keystore.properties`, kept out of git) it also builds and attaches
+`egPDF.apk`, which is what the Android app's self-updater looks for
+(`--no-android` to skip). Needs the [GitHub CLI](https://cli.github.com/)
 authenticated (`gh auth login`). Use `--skip-tests` to build faster or
 `--dry-run` to stage without publishing. The web version deploys itself from
 `main` via Vercel.

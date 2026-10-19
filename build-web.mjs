@@ -5,11 +5,17 @@
 // `node build-web.mjs --extension` builds the same app as the browser
 // extension's viewer page instead: src/ext-main.js as entry, output in
 // extension/viewer/, no meta CSP (the manifest's extension_pages CSP applies).
+//
+// `node build-web.mjs --android` builds the Android app's web layer: the same
+// renderer with the Capacitor bridge (src/android-main.js) and the mobile
+// layout (src/mobile.css), output in android-www/ (the Capacitor webDir).
 import { build } from 'esbuild';
 import { cpSync, mkdirSync, rmSync, readFileSync, writeFileSync } from 'fs';
 
 const EXT = process.argv.includes('--extension');
-const OUT = EXT ? 'extension/viewer' : 'web-dist';
+const ANDROID = process.argv.includes('--android');
+const OUT = EXT ? 'extension/viewer' : ANDROID ? 'android-www' : 'web-dist';
+const ENTRY = EXT ? 'src/ext-main.js' : ANDROID ? 'src/android-main.js' : 'src/web-main.js';
 
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(`${OUT}/dist`, { recursive: true });
@@ -17,7 +23,7 @@ mkdirSync(`${OUT}/src`, { recursive: true });
 mkdirSync(`${OUT}/tess/core`, { recursive: true });
 
 await build({
-  entryPoints: [EXT ? 'src/ext-main.js' : 'src/web-main.js'],
+  entryPoints: [ENTRY],
   bundle: true,
   outfile: `${OUT}/dist/renderer.js`,
   format: 'iife',
@@ -32,6 +38,7 @@ cpSync('node_modules/pdfjs-dist/build/pdf.worker.min.mjs', `${OUT}/dist/pdf.work
 cpSync('node_modules/pdfjs-dist/web/pdf_viewer.css', `${OUT}/dist/pdf_viewer.css`);
 cpSync('node_modules/pdfjs-dist/web/images', `${OUT}/dist/images`, { recursive: true });
 cpSync('src/styles.css', `${OUT}/src/styles.css`);
+if (ANDROID) cpSync('src/mobile.css', `${OUT}/src/mobile.css`);
 
 // bundled fonts (open-licensed; license files ship alongside)
 cpSync('web/fonts', `${OUT}/fonts`, { recursive: true });
@@ -69,6 +76,13 @@ html = html.replace('</head>', `  <style>
   </style>
 </head>`);
 if (EXT) html = html.replace('<title>egPDF</title>', '<title>egPDF</title>\n  <link rel="icon" href="../icons/icon48.png" />');
+if (ANDROID) {
+  // phone viewport (pinch-zoom is handled by the viewer, not the page) + the
+  // mobile layout on top of the desktop stylesheet
+  html = html
+    .replace('<meta charset="UTF-8" />', '<meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />')
+    .replace('<link rel="stylesheet" href="src/styles.css" />', '<link rel="stylesheet" href="src/styles.css" />\n  <link rel="stylesheet" href="src/mobile.css" />');
+}
 writeFileSync(`${OUT}/index.html`, html);
 
-console.log(`${EXT ? 'extension viewer' : 'web'} build ok → ${OUT}/`);
+console.log(`${EXT ? 'extension viewer' : ANDROID ? 'android' : 'web'} build ok → ${OUT}/`);

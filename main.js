@@ -182,7 +182,7 @@ let mainWindow = null;
 let pendingPaths = [];
 
 function collectPdfArgs(argv) {
-  return argv.filter((a) => /\.pdf$/i.test(a) && fs.existsSync(a));
+  return argv.filter((a) => /\.(pdf|udf)$/i.test(a) && fs.existsSync(a));
 }
 
 // Hidden self-test mode (--autotest=<dir> / --autoshot=<png>). Skips the
@@ -330,7 +330,11 @@ app.on('open-file', (e, p) => {
 ipcMain.handle('dialog:open-pdfs', async () => {
   const res = await dialog.showOpenDialog(mainWindow, {
     title: 'Open PDF',
-    filters: [{ name: 'PDF documents', extensions: ['pdf'] }],
+    filters: [
+      { name: 'PDF and UYAP documents', extensions: ['pdf', 'udf'] },
+      { name: 'PDF documents', extensions: ['pdf'] },
+      { name: 'UYAP documents', extensions: ['udf'] },
+    ],
     properties: ['openFile', 'multiSelections'],
   });
   return res.canceled ? [] : res.filePaths;
@@ -393,6 +397,14 @@ ipcMain.handle('font:path', (_e, name) => resolveFontPath(name || 'Arial'));
 
 // Bundled OCR-repair word lists (vendor/dict, unpacked from the asar like the
 // OCR models). The renderer parses them; empty string = list unavailable.
+// Bundled Liberation faces (web/fonts) — used to lay out UYAP .udf documents
+// the same way on every platform.
+ipcMain.handle('font:bundled', (_e, file) => {
+  const name = path.basename(String(file));
+  if (!/^Liberation[A-Za-z-]+\.ttf$/.test(name)) throw new Error('unknown font');
+  return fs.readFileSync(path.join(__dirname, 'web', 'fonts', name));
+});
+
 ipcMain.handle('dict:text', (_e, lang) => {
   if (!['en', 'tr', 'de', 'ar'].includes(lang)) return '';
   const p = path.join(__dirname, 'vendor', 'dict', `${lang}.txt`)
