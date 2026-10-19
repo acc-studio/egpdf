@@ -8,11 +8,16 @@
 //   node scripts/release.mjs               # test → build → tag → publish
 //   node scripts/release.mjs --skip-tests  # skip the e2e suite (faster)
 //   node scripts/release.mjs --dry-run     # build + stage only; no tag/publish
+//   node scripts/release.mjs --no-android  # skip the Android APK
+//
+// Alongside the desktop installer it builds the signed Android APK
+// (scripts/android.mjs → release/egPDF.apk) when android/keystore.properties
+// exists — the Android self-updater only offers releases that carry egPDF.apk.
 //
 // Prerequisites: git with push access, and the GitHub CLI authenticated
 // (`gh auth login`). Bump "version" in package.json before running.
 import { spawnSync } from 'child_process';
-import { readFileSync, copyFileSync, readdirSync } from 'fs';
+import { readFileSync, copyFileSync, readdirSync, existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -20,6 +25,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const argv = process.argv.slice(2);
 const skipTests = argv.includes('--skip-tests');
 const dryRun = argv.includes('--dry-run');
+const withAndroid = !argv.includes('--no-android') && existsSync(path.join(root, 'android', 'keystore.properties'));
 
 // npm/npx/gh are .cmd shims on Windows and need a shell; git is a real exe.
 const needsShell = (cmd) => process.platform === 'win32' && ['npm', 'npx', 'gh'].includes(cmd);
@@ -73,6 +79,15 @@ const stagedPath = path.join(releaseDir, PLATFORM.staged);
 copyFileSync(path.join(releaseDir, built), stagedPath);
 console.log(`\nstaged ${built} → ${PLATFORM.staged}`);
 
+// 4b) Android APK (signed with the release key; see scripts/android.mjs)
+const assets = [stagedPath];
+if (withAndroid) {
+  run('node', [path.join('scripts', 'android.mjs')]);
+  assets.push(path.join(releaseDir, 'egPDF.apk'));
+} else {
+  console.log('(skipping the Android APK)');
+}
+
 if (dryRun) { console.log('\n--dry-run: not tagging or publishing.'); process.exit(0); }
 
 // 5) tag (create + push if it doesn't exist yet)
@@ -85,11 +100,11 @@ if (capture('git', ['tag', '--list', tag]).out !== tag) {
 
 // 6) publish the release, or add/replace this platform's asset on an existing one
 if (releaseExists) {
-  console.log(`release ${tag} exists — uploading ${PLATFORM.staged} (clobber).`);
-  run('gh', ['release', 'upload', tag, stagedPath, '--clobber']);
+  console.log(`release ${tag} exists — uploading ${assets.map((a) => path.basename(a)).join(', ')} (clobber).`);
+  run('gh', ['release', 'upload', tag, ...assets, '--clobber']);
 } else {
-  run('gh', ['release', 'create', tag, stagedPath, '--title', tag, '--generate-notes']);
+  run('gh', ['release', 'create', tag, ...assets, '--title', tag, '--generate-notes']);
 }
 
-console.log(`\n✔ published ${tag} with ${PLATFORM.staged}`);
+console.log(`\n✔ published ${tag} with ${assets.map((a) => path.basename(a)).join(', ')}`);
 console.log('  (the web build deploys separately via Vercel on push to main)');

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">egPDF</string>
+    <string name="title_activity_main">egPDF</string>
+    <string name="package_name">com.azizcancengiz.egpdf</string>
+    <string name="custom_url_scheme">com.azizcancengiz.egpdf</string>
+</resources>

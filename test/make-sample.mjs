@@ -3,6 +3,7 @@
 // notes with an adversarial auto-fit font size), and a search target page.
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { writeFileSync } from 'fs';
+import { deflateRawSync, crc32 } from 'zlib';
 
 const outPath = process.argv[2];
 if (!outPath) {
@@ -48,3 +49,43 @@ p3.drawText('The aardvark appears twice: aardvark.', { x: 60, y: 740, size: 12, 
 
 writeFileSync(outPath, await doc.save());
 console.log('fixture written:', outPath);
+
+// A small UYAP document (.udf) next to it: Turkish text with a bold run, a
+// numbered list and a two-column table — the shapes real court documents use.
+const udfText = '\nŞişli 3. Asliye Hukuk Mahkemesine\nığüşöç İĞÜŞÖÇ metni\nBirinci madde\nİkinci madde\nHücre\nDeğer\n';
+const at = (s) => udfText.indexOf(s);
+const run = (s, extra = '') => `<content family="Times New Roman" size="12"${extra} startOffset="${at(s)}" length="${s.length + 1}" />`;
+const contentXml = `<?xml version="1.0" encoding="UTF-8" ?>
+<template format_id="1.8">
+<content><![CDATA[${udfText}]]></content>
+<properties><pageFormat mediaSizeName="1" leftMargin="70.0" rightMargin="70.0" topMargin="56.7" bottomMargin="56.7" paperOrientation="1" headerFOffset="20.0" footerFOffset="20.0" /></properties>
+<elements resolver="hvl-default">
+<paragraph Alignment="1"><content startOffset="0" length="1" /></paragraph>
+<paragraph Alignment="1">${run('Şişli 3. Asliye Hukuk Mahkemesine', ' bold="true"')}</paragraph>
+<paragraph Alignment="3">${run('ığüşöç İĞÜŞÖÇ metni')}</paragraph>
+<paragraph Numbered="true" NumberType="NUMBER_TYPE_NUMBER_DOT" ListId="1" ListLevel="1" LeftIndent="25.0">${run('Birinci madde')}</paragraph>
+<paragraph Numbered="true" NumberType="NUMBER_TYPE_NUMBER_DOT" ListId="1" ListLevel="1" LeftIndent="25.0">${run('İkinci madde')}</paragraph>
+<table tableName="T1" columnCount="2" columnSpans="30,70" border="borderNone"><row rowName="r1" rowType="dataRow"><cell><paragraph>${run('Hücre', ' bold="true"')}</paragraph></cell><cell><paragraph>${run('Değer')}</paragraph></cell></row></table>
+</elements>
+<styles><style name="hvl-default" family="Times New Roman" size="12" description="Gövde" /></styles>
+</template>`;
+writeFileSync(outPath.replace(/\.pdf$/i, '.udf'), zipOne('content.xml', Buffer.from(contentXml, 'utf8')));
+
+// single-entry ZIP (deflate), enough for a .udf
+function zipOne(name, data) {
+  const nameBuf = Buffer.from(name);
+  const comp = deflateRawSync(data);
+  const crc = crc32(data);
+  const local = Buffer.alloc(30);
+  local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt16LE(8, 8);
+  local.writeUInt32LE(crc, 14); local.writeUInt32LE(comp.length, 18); local.writeUInt32LE(data.length, 22);
+  local.writeUInt16LE(nameBuf.length, 26);
+  const central = Buffer.alloc(46);
+  central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(20, 4); central.writeUInt16LE(20, 6);
+  central.writeUInt16LE(8, 10); central.writeUInt32LE(crc, 16); central.writeUInt32LE(comp.length, 20);
+  central.writeUInt32LE(data.length, 24); central.writeUInt16LE(nameBuf.length, 28);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(1, 8); end.writeUInt16LE(1, 10);
+  end.writeUInt32LE(46 + nameBuf.length, 12); end.writeUInt32LE(30 + nameBuf.length + comp.length, 16);
+  return Buffer.concat([local, nameBuf, comp, central, nameBuf, end]);
+}

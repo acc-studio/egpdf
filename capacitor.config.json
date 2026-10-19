@@ -1,0 +1,9 @@
+{
+  "appId": "com.azizcancengiz.egpdf",
+  "appName": "egPDF",
+  "webDir": "android-www",
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": false
+  }
+}

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="egpdf_surface">#28282C</color>
+    <color name="egpdf_bg">#1D1D20</color>
+    <color name="colorPrimary">#6C93FF</color>
+    <color name="colorPrimaryDark">#28282C</color>
+    <color name="colorAccent">#6C93FF</color>
+</resources>

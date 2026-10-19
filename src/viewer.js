@@ -29,6 +29,7 @@ export function savedZoomPref() {
 }
 
 function saveZoomPref(fitMode, scale) {
+  if (!DocView.PERSIST_ZOOM) return;
   try {
     localStorage.setItem(ZOOM_PREF_KEY, JSON.stringify(fitMode ? { fit: true } : { scale }));
   } catch { /* storage unavailable — zoom just won't persist */ }
@@ -74,7 +75,7 @@ export class DocView {
     this.onPageRendered = opts.onPageRendered || (() => {});
     this.onZoom = opts.onZoom || (() => {});
     this.onScroll = opts.onScroll || (() => {});
-    const pref = savedZoomPref();
+    const pref = DocView.PERSIST_ZOOM ? savedZoomPref() : null;
     if (pref && !pref.fit) {
       this.scale = pref.scale;
       this.fitMode = false;
@@ -129,6 +130,13 @@ export class DocView {
   // (~24 typical pages, a few hundred MB of bitmap). Beyond it, the pages
   // farthest from the viewport are dropped first.
   static MAX_CACHED_PIXELS = 96e6;
+
+  // Horizontal room left around a fit-width page, in CSS px.
+  static FIT_MARGIN = 56;
+
+  // Remember the zoom across documents/launches. The phone layout turns this
+  // off: every document opens fit-to-width, pinch-zoom is per document.
+  static PERSIST_ZOOM = true;
 
   scheduleEvict() {
     if (this._evictTimer) return;
@@ -188,7 +196,7 @@ export class DocView {
 
   computeFitScale() {
     const maxW = Math.max(...this.baseSizes.map(s => s.w), 1);
-    return Math.max(0.2, (this.el.clientWidth - 56) / maxW);
+    return Math.max(0.2, (this.el.clientWidth - DocView.FIT_MARGIN) / maxW);
   }
 
   sizeHolder(holder, n) {

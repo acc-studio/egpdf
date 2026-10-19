@@ -515,6 +515,23 @@ export async function maybeRunAutotest(ctx) {
       extractedTitle: extractedTab?.title,
     };
 
+    // 14) UYAP .udf: laid out into a PDF with real (searchable) Turkish text;
+    // the tab has no file path, so Save can never overwrite the .udf
+    await ctx.openPaths([out('sample.udf')]);
+    await sleep(400);
+    const udfTab = ctx.getActive();
+    await waitFor(() => udfTab?.view?.holders[0]?._rendered, 'udf p1');
+    const udfText = (await (await udfTab.pdf.getPage(1)).getTextContent()).items.map((i) => i.str).join(' ');
+    results.udf = {
+      title: udfTab.title,
+      filePath: udfTab.filePath,
+      pages: udfTab.pdf.numPages,
+      turkish: udfText.includes('Şişli') && udfText.includes('ığüşöç') && udfText.includes('İĞÜŞÖÇ'),
+      numbered: /1\.\s*Birinci/.test(udfText) && /2\.\s*İkinci/.test(udfText),
+      table: udfText.includes('Hücre') && udfText.includes('Değer'),
+    };
+    await window.native.testCapture(out('t14-udf.png'));
+
     results.ok = true;
   } catch (e) {
     results.ok = false;
