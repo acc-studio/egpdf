@@ -251,6 +251,34 @@ export function initMobile() {
   $('sidebar').addEventListener('click', (e) => {
     if (e.target.closest('.thumb') && !e.target.closest('button')) shell.toggleSidebar(false);
   });
+  // Text selection: Android's own Copy/Share toolbar is suppressed natively
+  // (EgPdfWebView) because it covered this popup, so the popup gets Copy.
+  const selPopup = $('selection-popup');
+  const copyBtn = el('button', 'sp-copy', 'Copy');
+  selPopup.prepend(copyBtn);
+  copyBtn.addEventListener('click', async () => {
+    const text = window.getSelection()?.toString() || '';
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      document.execCommand('copy');
+    }
+    window.getSelection()?.removeAllRanges();
+    selPopup.classList.add('hidden');
+    shell.setStatus('Copied');
+  });
+  // Dragging the selection handles changes the selection without any touch
+  // event reaching the page; re-place the popup once the handles settle.
+  let selTimer = null;
+  document.addEventListener('selectionchange', () => {
+    clearTimeout(selTimer);
+    selTimer = setTimeout(() => {
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed) document.dispatchEvent(new PointerEvent('pointerup'));
+    }, 250);
+  });
+
   $('combine-hint').textContent = 'Long-press a page, then drag it into another document. The original keeps its copy.';
 
   // ---- home ----------------------------------------------------------------
