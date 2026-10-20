@@ -7,7 +7,7 @@
 //   highlight {page, x, y, w, h}
 //   text      {page, x, yTop, size, text}
 //   image     {page, x, yTop, w, h, data(b64), mime}
-//   note      {page, x, yTop, text}       — saved as a real PDF comment annotation
+//   note      {page, x, yTop, text, author, date(ISO)} — saved as a real PDF comment annotation
 
 export const editState = {
   tool: 'select',
@@ -16,6 +16,7 @@ export const editState = {
   pendingImage: null,   // {data, mime, naturalW, naturalH}
   selected: null,       // {tab, edit, el}
   _activeTextEdit: null, // {edit, tab, el} — uncommitted text edit being typed
+  _activeNote: null,     // finish(keep) of the comment card being edited
 };
 
 let nextId = 1;
@@ -318,30 +319,183 @@ export function commitActiveTextEdits() {
     editState._activeTextEdit = null;
     commitText(tab, edit, el);
   }
+  editState._activeNote?.(true);
 }
 
 // ---- note (comment) tool ----------------------------------------------------
 
 const NOTE_SVG = '<svg viewBox="0 0 24 24"><path d="M4 5.5C4 4.7 4.7 4 5.5 4h13c.8 0 1.5.7 1.5 1.5v9c0 .8-.7 1.5-1.5 1.5H12l-4.5 4v-4h-2c-.8 0-1.5-.7-1.5-1.5v-9Z"/></svg>';
+const PENCIL_SVG = '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg>';
+const TRASH_SVG = '<svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/></svg>';
+
+const AUTHOR_KEY = 'egpdf.author';
+
+// Default author for new comments; editing the name on any comment updates it.
+export function getNoteAuthor() {
+  try { return localStorage.getItem(AUTHOR_KEY) || ''; } catch { return ''; }
+}
+function setNoteAuthor(name) {
+  try { localStorage.setItem(AUTHOR_KEY, name); } catch { /* storage unavailable */ }
+}
+
+export function noteInitials(name) {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  const a = parts[0][0], b = parts.length > 1 ? parts[parts.length - 1][0] : '';
+  return (a + b).toLocaleUpperCase();
+}
+
+export function noteHue(name) {
+  let h = 0;
+  for (const ch of name || '') h = (h * 31 + ch.codePointAt(0)) % 360;
+  return h;
+}
+
+export function formatNoteDate(d) {
+  if (!d || isNaN(d)) return '';
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  return sameDay
+    ? d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
 
 function createNoteItem(tab, pageNum, layer, viewport, cx, cy) {
-  const [px, py] = viewport.convertToPdfPoint(cx, cy);
-  const edit = { kind: 'note', page: pageNum, x: px, yTop: py, text: '' };
+  // anchor the icon's centre on the click point
+  const [px, py] = viewport.convertToPdfPoint(cx - 11, cy - 11);
+  const edit = {
+    kind: 'note', page: pageNum, x: px, yTop: py, text: '',
+    author: getNoteAuthor(), date: new Date().toISOString(),
+  };
   const el = renderItem(tab, edit, layer, viewport, true);
   setTool('select');
   selectItem(tab, edit, el);
 }
 
-function commitNote(tab, edit, el, bubble) {
-  const text = bubble.innerText.replace(/\n+$/, '');
-  bubble.contentEditable = 'false';
-  if (!text.trim()) {
-    if (edit.id) removeEdit(tab, edit); else el.remove();
-    return;
+function buildNoteCard(tab, edit, el, startEditing) {
+  const card = document.createElement('div');
+  card.className = 'note-card';
+  card.tabIndex = -1; // clicks on the card's chrome keep focus inside it
+  card.innerHTML = `
+    <div class="note-head">
+      <div class="note-avatar"></div>
+      <div class="note-meta">
+        <input class="note-author" type="text" placeholder="Your name" spellcheck="false" maxlength="80" readonly>
+        <div class="note-date"></div>
+      </div>
+      <div class="note-actions">
+        <button class="note-btn note-edit" title="Edit comment">${PENCIL_SVG}</button>
+        <button class="note-btn note-delete" title="Delete comment">${TRASH_SVG}</button>
+      </div>
+    </div>
+    <div class="note-text"></div>
+    <textarea class="note-input" rows="3" placeholder="Write a comment…" spellcheck="false"></textarea>
+    <div class="note-foot">
+      <span class="note-hint">Ctrl+Enter to save</span>
+      <button class="note-cancel">Cancel</button>
+      <button class="note-save">Save</button>
+    </div>`;
+  const $q = (s) => card.querySelector(s);
+  const avatar = $q('.note-avatar'), author = $q('.note-author'), date = $q('.note-date');
+  const textView = $q('.note-text'), input = $q('.note-input'), save = $q('.note-save');
+
+  const paintAvatar = (name) => {
+    avatar.textContent = noteInitials(name);
+    avatar.style.setProperty('--hue', noteHue(name));
+  };
+  const show = () => {
+    author.value = edit.author || '';
+    paintAvatar(edit.author);
+    date.textContent = formatNoteDate(new Date(edit.date));
+    textView.textContent = edit.text;
+  };
+  const autosize = () => {
+    input.style.height = 'auto';
+    input.style.height = Math.min(220, input.scrollHeight + 2) + 'px';
+  };
+  const syncSave = () => { save.disabled = !input.value.trim(); };
+
+  let editing = false;
+  const begin = () => {
+    if (editing) return;
+    editState._activeNote?.(true);
+    editing = true;
+    editState._activeNote = finish;
+    el.classList.add('editing');
+    placeNoteCard(el);
+    author.readOnly = false;
+    input.value = edit.text;
+    autosize();
+    syncSave();
+    requestAnimationFrame(() => {
+      // a fresh comment with no name yet asks for the name first
+      const target = !edit.id && !author.value ? author : input;
+      target.focus();
+      if (target === input) input.setSelectionRange(input.value.length, input.value.length);
+    });
+  };
+  function finish(keep) {
+    if (!editing) return;
+    editing = false;
+    if (editState._activeNote === finish) editState._activeNote = null;
+    el.classList.remove('editing');
+    author.readOnly = true;
+    const text = input.value.replace(/\s+$/, '');
+    if (!keep) {
+      if (!edit.id) el.remove();
+      show();
+      return;
+    }
+    if (!text.trim()) {
+      if (edit.id) removeEdit(tab, edit); else el.remove();
+      return;
+    }
+    const name = author.value.trim();
+    if (name !== (edit.author || '')) setNoteAuthor(name);
+    if (text !== edit.text || name !== (edit.author || '')) edit.date = new Date().toISOString();
+    edit.text = text;
+    edit.author = name;
+    show();
+    if (!edit.id) { addEdit(tab, edit); el.dataset.editId = edit.id; }
+    else changedCb(tab);
   }
-  edit.text = text;
-  if (!edit.id) { addEdit(tab, edit); el.dataset.editId = edit.id; }
-  else changedCb(tab);
+
+  // clicks inside the card never start a drag of the comment
+  card.addEventListener('pointerdown', (e) => e.stopPropagation());
+  card.addEventListener('dblclick', (e) => { e.stopPropagation(); begin(); });
+  card.addEventListener('focusout', (e) => {
+    if (editing && !card.contains(e.relatedTarget)) finish(true);
+  });
+  card.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.stopPropagation(); finish(false); }
+    else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); finish(true); }
+    else if (e.key === 'Enter' && e.target === author) { e.preventDefault(); input.focus(); }
+  });
+  author.addEventListener('input', () => paintAvatar(author.value));
+  input.addEventListener('input', () => { autosize(); syncSave(); });
+  $q('.note-edit').addEventListener('click', begin);
+  $q('.note-delete').addEventListener('click', () => {
+    editing = false;
+    if (editState._activeNote === finish) editState._activeNote = null;
+    if (edit.id) removeEdit(tab, edit); else el.remove();
+  });
+  $q('.note-cancel').addEventListener('click', () => finish(false));
+  save.addEventListener('click', () => finish(true));
+  el.addEventListener('pointerenter', () => { if (!editing) placeNoteCard(el); });
+  el.addEventListener('dblclick', begin);
+
+  show();
+  if (startEditing) begin();
+  return card;
+}
+
+// Open the card on whichever side of the icon has room on the page.
+function placeNoteCard(el) {
+  const layer = el.parentElement;
+  if (!layer) return;
+  const left = parseFloat(el.style.left) || 0, top = parseFloat(el.style.top) || 0;
+  el.classList.toggle('flip-x', left + 30 + 290 > layer.clientWidth && left > 300);
+  el.classList.toggle('flip-y', top + 200 > layer.clientHeight && top > 200);
 }
 
 // ---- image tool ------------------------------------------------------------
@@ -408,27 +562,7 @@ function renderItem(tab, edit, layer, viewport, startEditing = false) {
     icon.className = 'note-icon';
     icon.innerHTML = NOTE_SVG;
     el.appendChild(icon);
-    const bubble = document.createElement('div');
-    bubble.className = 'note-bubble';
-    bubble.innerText = edit.text;
-    bubble.spellcheck = false;
-    el.appendChild(bubble);
-    const startEdit = () => {
-      bubble.contentEditable = 'true';
-      bubble.focus();
-      const r = document.createRange();
-      r.selectNodeContents(bubble);
-      r.collapse(false);
-      getSelection().removeAllRanges();
-      getSelection().addRange(r);
-    };
-    bubble.addEventListener('blur', () => commitNote(tab, edit, el, bubble));
-    bubble.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { e.stopPropagation(); bubble.blur(); }
-    });
-    bubble.addEventListener('pointerdown', (e) => e.stopPropagation());
-    el.addEventListener('dblclick', startEdit);
-    if (startEditing) requestAnimationFrame(startEdit);
+    el.appendChild(buildNoteCard(tab, edit, el, startEditing));
   } else if (edit.kind === 'image') {
     const [lx, ly] = viewport.convertToViewportPoint(edit.x, edit.yTop);
     Object.assign(el.style, {
@@ -455,6 +589,7 @@ function renderItem(tab, edit, layer, viewport, startEditing = false) {
   });
 
   layer.appendChild(el);
+  if (edit.kind === 'note') placeNoteCard(el);
   if (startEditing) requestAnimationFrame(() => el.focus());
   return el;
 }

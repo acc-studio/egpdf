@@ -3,7 +3,7 @@ import { DocView, loadPdf } from './viewer.js';
 import {
   editState, setTool, onEditsChanged, onToolChanged, onOcrArea,
   undoLast, deleteSelected, clearSelection, applyTextSize, applyFontFamily,
-  addSelectionRects, editTextFromSelection,
+  addSelectionRects, editTextFromSelection, commitActiveTextEdits,
 } from './edits.js';
 import { ocrArea } from './ocrbox.js';
 import { openPrintPreview, isPrintPreviewOpen } from './print.js';
@@ -355,6 +355,7 @@ async function reloadTab(tab, bytes, { filePath = tab.filePath, edits = tab.edit
 let saving = false;
 async function saveActive(saveAs = false) {
   if (!active || saving) return;
+  commitActiveTextEdits();
   const tab = active;
   let target = tab.filePath;
   if (saveAs || !target) {

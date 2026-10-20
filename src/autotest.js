@@ -252,9 +252,31 @@ export async function maybeRunAutotest(ctx) {
     // 8) highlight + comment on page 2, save, verify a real /Text annotation exists
     t2.edits.push(
       { id: 9101, kind: 'highlight', page: 2, x: 55, y: 620, w: 330, h: 60 },
-      { id: 9102, kind: 'note', page: 2, x: 500, yTop: 780, text: 'Gözden geçir: bu bölüm önemli.' },
+      { id: 9102, kind: 'note', page: 2, x: 500, yTop: 780, text: 'Gözden geçir: bu bölüm önemli.',
+        author: 'Av. Ayşe Yılmaz', date: '2026-03-04T10:20:30.000Z' },
     );
     t2.view.refreshEditLayer(2);
+    const noteEl = document.querySelector('.edit-item.noteedit[data-edit-id="9102"]');
+    results.noteCard = noteEl
+      ? { author: noteEl.querySelector('.note-author')?.value ?? null,
+          avatar: noteEl.querySelector('.note-avatar')?.textContent ?? null,
+          text: noteEl.querySelector('.note-text')?.textContent ?? null }
+      : 'no note card rendered';
+    if (noteEl) {
+      t2.view.scrollToPage(2);
+      await sleep(400);
+      const live = () => document.querySelector('.edit-item.noteedit[data-edit-id="9102"]');
+      live()?.classList.add('selected');
+      await sleep(150);
+      await window.native.testCapture(out('t8-note-card.png'));
+      live()?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      await sleep(150);
+      results.noteCard.editing = !!live()?.classList.contains('editing');
+      await window.native.testCapture(out('t8-note-editing.png'));
+      live()?.querySelector('.note-cancel')?.click();
+      results.noteCard.cancelKeepsText = live()?.querySelector('.note-text')?.textContent === 'Gözden geçir: bu bölüm önemli.';
+      live()?.classList.remove('selected');
+    }
     const bytes2 = await buildSavedPdf(t2);
     await window.native.writeFile(out('saved2.pdf'), bytes2);
     const saved2 = await loadPdf(new Uint8Array(bytes2));
@@ -262,7 +284,8 @@ export async function maybeRunAutotest(ctx) {
     const s2annots = await s2p2.getAnnotations({ intent: 'display' });
     const noteAnnot = s2annots.find((a) => a.subtype === 'Text');
     results.noteSaved = noteAnnot
-      ? { contents: noteAnnot.contentsObj?.str ?? null, name: noteAnnot.name ?? null }
+      ? { contents: noteAnnot.contentsObj?.str ?? null, name: noteAnnot.name ?? null,
+          title: noteAnnot.titleObj?.str ?? null, modDate: noteAnnot.modificationDate ?? null }
       : 'no Text annotation found';
     saved2.destroy();
     await ctx.openPaths([out('saved2.pdf')]);
@@ -272,6 +295,18 @@ export async function maybeRunAutotest(ctx) {
     await waitFor(() => tab3.view.holders[1]?._rendered, 'saved2 p2');
     await sleep(500);
     await window.native.testCapture(out('t8-highlight-note.png'));
+    // the saved comment, reopened, renders through pdf.js's popup — restyled
+    const textAnnot = tab3.view.holders[1].querySelector('.annotationLayer .textAnnotation');
+    textAnnot?.click();
+    await sleep(300);
+    const popup = tab3.view.holders[1].querySelector('.annotationLayer .popup');
+    results.existingPopup = popup
+      ? { author: popup.querySelector('.egp-author')?.textContent ?? null,
+          avatar: popup.querySelector('.egp-avatar')?.textContent ?? null,
+          hasDate: !!popup.querySelector('.egp-date')?.textContent }
+      : 'no popup';
+    await window.native.testCapture(out('t8-existing-comment.png'));
+    textAnnot?.click();
 
     // 9) fonts + print preview (actual dispatch to a printer isn't driven —
     // everything up to the Print click is)

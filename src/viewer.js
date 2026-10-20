@@ -1,5 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist';
-import { mountEditLayer, commitActiveTextEdits } from './edits.js';
+import { mountEditLayer, commitActiveTextEdits, noteInitials, noteHue, formatNoteDate } from './edits.js';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = './dist/pdf.worker.min.mjs';
 
@@ -366,6 +366,7 @@ export class DocView {
             if (!m || +m[1] > 24) ta.style.fontSize = 'calc(11px * var(--scale-factor))';
           }
           annotDiv.querySelectorAll('input, textarea').forEach((el) => { el.spellcheck = false; });
+          decorateCommentPopups(annotDiv);
         }
       } catch (e) { console.warn('annotation layer failed', e); }
       if (myEpoch !== this.epoch) { retry = true; return; }
@@ -440,4 +441,50 @@ export class DocView {
     this.el.remove();
     try { this.pdf.destroy(); } catch {}
   }
+}
+
+// pdf.js builds comment popups lazily (on first hover/click) with a bare
+// header and an untranslated date — restyle each one into the same card the
+// edit layer uses: avatar, author, readable date.
+function decorateCommentPopups(annotDiv) {
+  const decorate = (popup) => {
+    if (popup._egp) return;
+    popup._egp = true;
+    const header = popup.querySelector(':scope > .header');
+    if (!header) return;
+    if (popup.style.outlineColor) popup.style.setProperty('--egp-accent', popup.style.outlineColor);
+    const name = header.querySelector('h1')?.textContent?.trim() || '';
+    const avatar = document.createElement('div');
+    avatar.className = 'egp-avatar';
+    avatar.textContent = noteInitials(name);
+    avatar.style.setProperty('--hue', noteHue(name));
+    const meta = document.createElement('div');
+    meta.className = 'egp-meta';
+    const author = document.createElement('div');
+    author.className = 'egp-author';
+    author.textContent = name || 'Unknown author';
+    meta.append(author);
+    const dateEl = header.querySelector('.popupDate');
+    try {
+      const ts = JSON.parse(dateEl?.dataset.l10nArgs || '{}').dateObj;
+      const when = ts ? formatNoteDate(new Date(ts)) : '';
+      if (when) {
+        const d = document.createElement('div');
+        d.className = 'egp-date';
+        d.textContent = when;
+        meta.append(d);
+      }
+    } catch { /* no date */ }
+    header.prepend(avatar, meta);
+  };
+  annotDiv.querySelectorAll('.popup').forEach(decorate);
+  new MutationObserver((muts) => {
+    for (const m of muts) {
+      for (const n of m.addedNodes) {
+        if (n.nodeType !== 1) continue;
+        if (n.classList.contains('popup')) decorate(n);
+        else n.querySelectorAll?.('.popup').forEach(decorate);
+      }
+    }
+  }).observe(annotDiv, { childList: true, subtree: true });
 }

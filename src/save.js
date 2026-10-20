@@ -1,6 +1,6 @@
 import {
   PDFDocument, PDFTextField, StandardFonts, rgb, BlendMode,
-  PDFName, PDFHexString, PDFArray, degrees,
+  PDFName, PDFHexString, PDFString, PDFArray, degrees,
 } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { pdfjsLib } from './viewer.js';
@@ -91,20 +91,31 @@ function removeFieldsOnPage(doc, page) {
   }
 }
 
+// PDF date string (D:YYYYMMDDHHmmSS+HH'mm') in local time.
+function pdfDate(d) {
+  if (isNaN(d)) d = new Date();
+  const p = (n) => String(Math.abs(n)).padStart(2, '0');
+  const off = -d.getTimezoneOffset();
+  return `D:${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`
+    + (off === 0 ? 'Z' : `${off > 0 ? '+' : '-'}${p(Math.trunc(off / 60))}'${p(off % 60)}'`);
+}
+
 // Append a real /Text (sticky-note) annotation so comments show up in any
 // PDF viewer, not just ours.
-function addNoteAnnotation(doc, page, x, yTop, text) {
+function addNoteAnnotation(doc, page, x, yTop, text, author, date) {
+  const when = pdfDate(date ? new Date(date) : new Date());
   const annot = doc.context.obj({
     Type: 'Annot',
     Subtype: 'Text',
     Rect: [x, yTop - 20, x + 20, yTop],
     Contents: PDFHexString.fromText(text),
-    T: PDFHexString.fromText('egPDF'),
+    T: PDFHexString.fromText(author || 'egPDF'),
     Name: 'Comment',
     Open: false,
     F: 4,
     C: [1, 0.84, 0.2],
-    M: PDFHexString.fromText(new Date().toISOString()),
+    M: PDFString.of(when),
+    CreationDate: PDFString.of(when),
   });
   const ref = doc.context.register(annot);
   let annots = page.node.lookupMaybe(PDFName.of('Annots'), PDFArray);
@@ -300,7 +311,7 @@ export async function buildSavedPdf(tab) {
         });
       } else if (e.kind === 'note') {
         const [x, yTop] = remapPoint(e.x, e.yTop);
-        addNoteAnnotation(doc, page, x, yTop, e.text);
+        addNoteAnnotation(doc, page, x, yTop, e.text, e.author, e.date);
       } else if (e.kind === 'text') {
         const [x, yTop] = remapPoint(e.x, e.yTop);
         page.drawText(e.text, {

@@ -286,25 +286,123 @@ body.split .pane.focused::after {
 }
 .edit-item.whiteout { background: #fff; outline: 1px dashed rgba(0,0,0,0.25); }
 .edit-item.highlight { background: rgba(255, 214, 51, 0.45); mix-blend-mode: multiply; }
-.edit-item.noteedit { width: 22px; height: 22px; cursor: default; }
+/* ---------- Comments (our editable cards + existing PDF comment popups) ---------- */
+.edit-item.noteedit { width: 22px; height: 22px; cursor: grab; }
 .edit-item.noteedit .note-icon {
-  width: 22px; height: 22px; color: #e8a812;
-  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.25));
+  width: 22px; height: 22px;
+  filter: drop-shadow(0 1px 1.5px rgba(0,0,0,0.3));
+  transition: transform 0.12s ease;
 }
+.edit-item.noteedit:hover .note-icon,
+.edit-item.noteedit.selected .note-icon { transform: scale(1.12); }
 .edit-item.noteedit .note-icon svg { width: 22px; height: 22px; fill: #ffd633; stroke: #b47d00; stroke-width: 1.2; }
-.edit-item.noteedit .note-bubble {
-  position: absolute; left: 26px; top: 0;
-  min-width: 160px; max-width: 260px;
-  background: #fff9df; color: #3a3010;
-  border: 1px solid #e5cd6a; border-radius: 6px;
-  padding: 7px 9px; font-size: 12px; line-height: 1.4;
-  box-shadow: var(--shadow);
-  white-space: pre-wrap; word-break: break-word;
-  display: none; z-index: 20; cursor: text;
+.edit-item.noteedit.selected { outline: none; }
+
+.note-card {
+  position: absolute; left: 30px; top: -4px;
+  width: 270px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-left: 3px solid #f0c419;
+  border-radius: 9px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12), 0 10px 28px rgba(0,0,0,0.14);
+  font: 12.5px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  padding: 10px 12px 10px 11px;
+  display: none; z-index: 20; cursor: default; outline: none;
 }
-.edit-item.noteedit:hover .note-bubble,
-.edit-item.noteedit.selected .note-bubble,
-.edit-item.noteedit .note-bubble[contenteditable="true"] { display: block; }
+.edit-item.noteedit.flip-x .note-card { left: auto; right: 30px; }
+.edit-item.noteedit.flip-y .note-card { top: auto; bottom: -4px; }
+.edit-item.noteedit:hover .note-card,
+.edit-item.noteedit.selected .note-card,
+.edit-item.noteedit.editing .note-card { display: block; }
+.edit-item.noteedit.editing .note-card { border-left-color: var(--accent); }
+
+.note-head { display: flex; align-items: center; gap: 8px; }
+.note-avatar, .annotationLayer .popup .egp-avatar {
+  flex: none; width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: hsl(var(--hue, 45) 55% 48%); color: #fff;
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.3px;
+  user-select: none;
+}
+.note-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.note-author {
+  font: inherit; font-weight: 600; color: var(--text);
+  background: transparent; border: 0; border-bottom: 1px solid transparent;
+  padding: 0; margin: 0; width: 100%; min-width: 0; outline: none;
+  text-overflow: ellipsis;
+}
+.note-author[readonly] { cursor: default; }
+.note-author[readonly]:placeholder-shown { font-weight: 500; color: var(--text-dim); }
+.note-author:not([readonly]) { border-bottom-color: var(--border); }
+.note-author:not([readonly]):focus { border-bottom-color: var(--accent); }
+.note-date { font-size: 11px; color: var(--text-dim); }
+.note-actions { display: flex; gap: 2px; opacity: 0; transition: opacity 0.12s; }
+.note-card:hover .note-actions, .edit-item.noteedit.selected .note-actions { opacity: 1; }
+.edit-item.noteedit.editing .note-actions .note-edit { display: none; }
+.note-btn {
+  width: 26px; height: 26px; padding: 4px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--text-dim); cursor: pointer;
+}
+.note-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.note-btn:hover { background: rgba(127,127,127,0.14); color: var(--text); }
+.note-btn.note-delete:hover { color: var(--danger); }
+
+.note-text {
+  margin-top: 7px; white-space: pre-wrap; word-break: break-word;
+  max-height: 240px; overflow-y: auto; user-select: text;
+}
+.note-input {
+  display: none; width: 100%; margin-top: 8px;
+  font: inherit; color: var(--text); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 8px; resize: none; outline: none; min-height: 60px;
+}
+.note-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.note-foot { display: none; align-items: center; gap: 6px; margin-top: 8px; }
+.note-hint { flex: 1; font-size: 10.5px; color: var(--text-dim); }
+.note-foot button {
+  font: inherit; font-size: 12px; padding: 4px 11px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+}
+.note-foot button:hover { background: rgba(127,127,127,0.12); }
+.note-foot .note-save { background: var(--accent); border-color: var(--accent); color: #fff; }
+.note-foot .note-save:hover { filter: brightness(1.08); background: var(--accent); }
+.note-foot .note-save:disabled { opacity: 0.45; cursor: default; filter: none; }
+.edit-item.noteedit.editing .note-text { display: none; }
+.edit-item.noteedit.editing .note-input { display: block; }
+.edit-item.noteedit.editing .note-foot { display: flex; }
+
+/* pdf.js popups for comments already in the file — same card look, fixed
+   readable size regardless of zoom */
+.annotationLayer .popupAnnotation { max-width: 290px; z-index: 30; }
+.annotationLayer .popup {
+  background: var(--surface) !important; color: var(--text);
+  border: 1px solid var(--border); border-left: 3px solid var(--egp-accent, #f0c419);
+  outline: none !important; border-radius: 9px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12), 0 10px 28px rgba(0,0,0,0.14);
+  padding: 10px 12px 10px 11px; min-width: 200px; max-width: 290px;
+  font: 12.5px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.annotationLayer .popup * { font-size: 12.5px; }
+.annotationLayer .popup > .header { display: flex; align-items: center; gap: 8px; }
+.annotationLayer .popup > .header h1 { display: none; }
+.annotationLayer .popup > .header .egp-meta { display: flex; flex-direction: column; min-width: 0; }
+.annotationLayer .popup > .header .egp-author { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.annotationLayer .popup > .header .popupDate { display: none; }
+.annotationLayer .popup .egp-date { font-size: 11px; color: var(--text-dim); }
+.annotationLayer .popup .popupContent {
+  border-top: 0; margin-top: 7px; padding-top: 0;
+  white-space: pre-wrap; word-break: break-word;
+}
+.annotationLayer .popup .richText > * { font-size: 12.5px; }
+.annotationLayer .popupAnnotation.focused .popup { border-left-width: 3px; box-shadow: 0 0 0 2px var(--accent-soft), 0 10px 28px rgba(0,0,0,0.16); }
+.annotationLayer .popup .egp-avatar { font-size: 10.5px; }
+.annotationLayer .textAnnotation img { opacity: 0; }
+.annotationLayer .textAnnotation {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4 5.5C4 4.7 4.7 4 5.5 4h13c.8 0 1.5.7 1.5 1.5v9c0 .8-.7 1.5-1.5 1.5H12l-4.5 4v-4h-2c-.8 0-1.5-.7-1.5-1.5v-9Z' fill='%23ffd633' stroke='%23b47d00' stroke-width='1.2'/%3E%3C/svg%3E") center / contain no-repeat;
+  filter: drop-shadow(0 1px 1.5px rgba(0,0,0,0.3));
+  max-width: 24px; max-height: 24px;
+}
 .edit-item.textedit {
   color: #111; background: transparent;
   white-space: pre; outline: none; min-width: 8px;
